@@ -17,7 +17,12 @@ public static class SeedData
         var userManager = sp.GetRequiredService<UserManager<IdentityUser>>();
         var roleManager = sp.GetRequiredService<RoleManager<IdentityRole>>();
 
-        await db.Database.MigrateAsync();
+        // Postgres 演示库直接按当前模型建表（迁移文件是 SQLite 专用类型，不能复用）；
+        // 本地 SQLite 仍走迁移，保留历史演进的完整性。
+        if (db.Database.IsNpgsql())
+            await db.Database.EnsureCreatedAsync();
+        else
+            await db.Database.MigrateAsync();
 
         foreach (var role in new[] { AppRoles.Admin, AppRoles.Reviewer, AppRoles.Filler })
         {

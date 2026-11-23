@@ -1,10 +1,11 @@
-﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using GroupBudget.Models;
 
 namespace GroupBudget.Data;
 
-public class ApplicationDbContext : IdentityDbContext
+public class ApplicationDbContext : IdentityDbContext, IDataProtectionKeyContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -26,6 +27,9 @@ public class ApplicationDbContext : IdentityDbContext
     public DbSet<FormVersion> FormVersions => Set<FormVersion>();
     public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
     public DbSet<UserOrganization> UserOrganizations => Set<UserOrganization>();
+
+    /// <summary>Data Protection 密钥环：存库后多实例/重启仍能解开登录 Cookie 与防伪令牌。</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
