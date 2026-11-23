@@ -22,7 +22,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 // 优先使用托管 Postgres（Vercel / Neon 注入 DATABASE_URL），否则退回本地 SQLite
-var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+// 不同集成注入的变量名略有差异，按常见顺序兜底
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? Environment.GetEnvironmentVariable("POSTGRES_URL")
+    ?? Environment.GetEnvironmentVariable("POSTGRES_PRISMA_URL");
 var usePostgres = !string.IsNullOrWhiteSpace(databaseUrl);
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
