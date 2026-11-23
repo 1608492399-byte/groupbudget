@@ -1,0 +1,186 @@
+@model BudgetSummaryViewModel
+@{
+    ViewData["Title"] = "集团汇总表";
+    string F(decimal v) => v == 0m ? "-" : v.ToString("N2");
+    string R(decimal? v) => v.HasValue ? v.Value.ToString("P2") : "-";
+    var groups = Model.Rows.GroupBy(x => x.Category ?? "其他").ToList();
+}
+
+<div class="d-flex justify-content-between align-items-end mb-2">
+    <div>
+        <h2 class="mb-1">@(Model.PlanYear) 年各部门基本支出、项目支出预算总表</h2>
+        <div class="text-muted small">
+            单位：元 · 批次：@Model.BatchName · 部门列为本部门 @Model.PlanYear 年基本支出预算，项目支出单列；上年决算数为 @Model.BaselineYear 年
+        </div>
+    </div>
+    <form method="get" class="d-flex gap-2 align-items-center">
+        <label class="small text-muted">批次</label>
+        <select name="batchId" class="form-select form-select-sm" onchange="this.form.submit()" style="width:260px">
+            @foreach (var b in Model.Batches)
+            {
+                <option value="@b.Id" selected="@(b.Id == Model.BatchId)">@b.Name（@b.Status）</option>
+            }
+        </select>
+    </form>
+</div>
+
+@if (Model.TotalRow is null)
+{
+    <div class="alert alert-warning">暂无批次或尚无填报数据。</div>
+    return;
+}
+
+<div class="table-responsive summary-scroll">
+    <table class="table table-bordered table-sm align-middle summary-table mb-0">
+        <thead class="text-center">
+            <tr>
+                <th rowspan="2" style="width:96px">费用类别</th>
+                <th rowspan="2" style="width:52px">序号</th>
+                <th rowspan="2" style="min-width:150px">预算科目</th>
+                <th colspan="@Model.Organizations.Count">各部门基本支出预算明细（@Model.PlanYear 年）</th>
+                <th colspan="3">@Model.PlanYear 年度预算数汇总</th>
+                <th rowspan="2" style="width:120px">上年决算数<br /><span class="fw-normal">(@Model.BaselineYear 年)</span></th>
+                <th rowspan="2" style="width:120px">较上年决算<br />增减</th>
+                <th rowspan="2" style="width:100px">较上年决算<br />增幅</th>
+            </tr>
+            <tr>
+                @foreach (var org in Model.Organizations)
+                {
+                    <th style="min-width:96px">@org.Name</th>
+                }
+                <th style="width:110px">基本支出</th>
+                <th style="width:110px">项目支出</th>
+                <th style="width:110px">小计</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var group in groups)
+            {
+                var rows = group.ToList();
+                var sumBasic = rows.Sum(x => x.BasicTotal);
+                var sumProject = rows.Sum(x => x.ProjectTotal);
+                var sumSubtotal = sumBasic + sumProject;
+                var sumActual = rows.Sum(x => x.Actual2026Total);
+                var sumChange = sumSubtotal - sumActual;
+
+                for (var r = 0; r < rows.Count; r++)
+                {
+                    var row = rows[r];
+                    <tr>
+                        @if (r == 0)
+                        {
+                            <td rowspan="@rows.Count" class="category-cell">@group.Key</td>
+                        }
+                        <td class="text-center text-muted">@(row.Sequence).</td>
+                        <td class="text-nowrap">@row.SubjectName</td>
+                        @foreach (var org in Model.Organizations)
+                        {
+                            var basic = row.BasicByOrganization.TryGetValue(org.Id, out var b) ? b : 0m;
+                            <td class="text-end">@F(basic)</td>
+                        }
+                        <td class="text-end">@F(row.BasicTotal)</td>
+                        <td class="text-end">@F(row.ProjectTotal)</td>
+                        <td class="text-end fw-semibold">@F(row.Subtotal)</td>
+                        <td class="text-end">
+                            @if (row.Actual2026Total > 0m)
+                            {
+                                <a class="text-decoration-none" title="查看该科目 @Model.BaselineYear 年决算明细"
+                                   asp-controller="ActualDetail" asp-action="Index"
+                                   asp-route-batchId="@Model.BatchId" asp-route-subjectId="@row.SubjectId">@F(row.Actual2026Total)</a>
+                            }
+                            else
+                            {
+                                @F(row.Actual2026Total)
+                            }
+                        </td>
+                        <td class="text-end">@F(row.Change)</td>
+                        <td class="text-end">@R(row.Rate)</td>
+                    </tr>
+                }
+
+                <tr class="subtotal-row fw-bold">
+                    <td colspan="3" class="text-end">@group.Key 小计</td>
+                    @foreach (var org in Model.Organizations)
+                    {
+                        var basic = rows.Sum(x => x.BasicByOrganization.TryGetValue(org.Id, out var b) ? b : 0m);
+                        <td class="text-end">@F(basic)</td>
+                    }
+                    <td class="text-end">@F(sumBasic)</td>
+                    <td class="text-end">@F(sumProject)</td>
+                    <td class="text-end">@F(sumSubtotal)</td>
+                    <td class="text-end">@F(sumActual)</td>
+                    <td class="text-end">@F(sumChange)</td>
+                    <td class="text-end">@R(sumActual == 0m ? null : sumChange / sumActual)</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot class="fw-bold">
+            <tr class="total-row">
+                <td colspan="3" class="text-end">@Model.TotalRow.SubjectName</td>
+                @foreach (var org in Model.Organizations)
+                {
+                    var basic = Model.TotalRow.BasicByOrganization.TryGetValue(org.Id, out var b) ? b : 0m;
+                    <td class="text-end">@F(basic)</td>
+                }
+                <td class="text-end">@F(Model.TotalRow.BasicTotal)</td>
+                <td class="text-end">@F(Model.TotalRow.ProjectTotal)</td>
+                <td class="text-end">@F(Model.TotalRow.Subtotal)</td>
+                <td class="text-end">@F(Model.TotalRow.Actual2026Total)</td>
+                <td class="text-end">@F(Model.TotalRow.Change)</td>
+                <td class="text-end">@R(Model.TotalRow.Rate)</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<div class="text-muted small mt-2">
+    说明：0 值显示为「-」；增减 = 小计 − @(Model.BaselineYear) 年决算；增幅 = 增减 ÷ @(Model.BaselineYear) 年决算，分母为 0 时留空；
+    基本支出与项目支出按明细费用属性分别汇总，小计 = 基本 + 项目。
+</div>
+
+<style>
+    .summary-scroll {
+        max-height: 72vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .summary-table {
+        font-size: 12px;
+    }
+
+    .summary-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: #eef2f7;
+        white-space: nowrap;
+    }
+
+    .summary-table thead tr:nth-child(2) th {
+        top: 42px;
+    }
+
+    .summary-table td, .summary-table th {
+        padding: 4px 6px;
+        white-space: nowrap;
+    }
+
+    .category-cell {
+        background: #f8f9fa;
+        font-weight: 600;
+        text-align: center;
+        vertical-align: middle !important;
+        color: #0d6efd;
+        white-space: normal;
+    }
+
+    .summary-table .subtotal-row td {
+        background: #f8f9fa;
+    }
+
+    .summary-table .total-row td {
+        background: #e2e3e5;
+        border-top: 2px solid #adb5bd;
+    }
+</style>

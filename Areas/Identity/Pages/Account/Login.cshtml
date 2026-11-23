@@ -1,0 +1,131 @@
+﻿@page
+@model GroupBudget.Areas.Identity.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "登录";
+    Layout = "/Views/Shared/_AuthLayout.cshtml";
+
+    var hasError = ViewData.ModelState.TryGetValue(string.Empty, out var entry) && entry.Errors.Count > 0;
+}
+
+<div class="auth-page">
+
+    <section class="auth-brand">
+        <div class="brand-mark">
+            <span class="glyph">预</span>
+            <span class="name"><b>集团预决算</b>上报与审核系统</span>
+        </div>
+
+        <div>
+            <h1>一年一报，<br />先把数说清楚。</h1>
+            <p class="lede">本年预算与决算作为只读基准下发，各部门只填报次年预算——口径统一、过程留痕。</p>
+        </div>
+
+        <ul class="brand-points">
+            <li>基准数据按「年度 × 部门 × 科目」下发并锁定版本</li>
+            <li>增减额、增幅与合计由服务端计算，不信任前端</li>
+            <li>提交后单据锁定，审核打回必填意见并留存版本</li>
+        </ul>
+
+        <div class="brand-foot">内部系统 · 数据仅限授权人员使用</div>
+    </section>
+
+    <section class="auth-form-wrap">
+        <div class="auth-card">
+            <div class="kicker">集团财务 · 内部系统</div>
+            <h2>登录</h2>
+            <p class="sub">使用集团邮箱账号登录，系统按角色进入对应工作台。</p>
+
+            <form class="auth-form" method="post" asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl" novalidate>
+                @if (hasError)
+                {
+                    <div class="auth-alert" role="alert">
+                        <ul>
+                            @foreach (var error in entry!.Errors)
+                            {
+                                <li>@error.ErrorMessage</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <div class="field">
+                    <label asp-for="Input.Email">登录邮箱</label>
+                    <input asp-for="Input.Email" class="ctl" autocomplete="username" placeholder="name@group.local" autofocus />
+                    <span asp-validation-for="Input.Email" class="field-error"></span>
+                </div>
+
+                <div class="field">
+                    <label asp-for="Input.Password">密码</label>
+                    <div class="ctl-wrap">
+                        <input asp-for="Input.Password" class="ctl" autocomplete="current-password" placeholder="请输入密码" id="passwordInput" />
+                        <button type="button" class="ctl-toggle" id="togglePassword" aria-label="显示或隐藏密码">显示</button>
+                    </div>
+                    <span asp-validation-for="Input.Password" class="field-error"></span>
+                </div>
+
+                <div class="form-row">
+                    <label class="check">
+                        <input asp-for="Input.RememberMe" />
+                        <span>保持登录状态</span>
+                    </label>
+                    <a class="link-quiet" asp-page="./ForgotPassword">忘记密码？</a>
+                </div>
+
+                <button type="submit" class="btn-submit">登录</button>
+            </form>
+
+            <div class="auth-divide">演示账号 · 一键填入</div>
+            <div class="demo-chips">
+                <button type="button" class="chip" data-email="admin@group.local" data-password="Admin@123">
+                    <b>系统管理员</b>
+                    <span>admin@group.local</span>
+                </button>
+                <button type="button" class="chip" data-email="reviewer@group.local" data-password="Review@123">
+                    <b>集团审核员</b>
+                    <span>reviewer@group.local</span>
+                </button>
+                <button type="button" class="chip" data-email="filler@group.local" data-password="Fill@123">
+                    <b>部门填报员</b>
+                    <span>filler@group.local</span>
+                </button>
+            </div>
+            <p class="auth-note">
+                演示环境账号，仅用于内网验收；正式上线前会移除演示账号并关闭自助注册。
+                首次使用请联系系统管理员开通账号。
+            </p>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var email = document.getElementById('Input_Email');
+            var password = document.getElementById('passwordInput');
+            var submit = document.querySelector('.btn-submit');
+            var toggle = document.getElementById('togglePassword');
+            var chips = document.querySelectorAll('.chip');
+
+            chips.forEach(function (chip) {
+                chip.addEventListener('click', function () {
+                    chips.forEach(function (c) { c.classList.remove('active'); });
+                    chip.classList.add('active');
+                    email.value = chip.dataset.email;
+                    password.value = chip.dataset.password;
+                    password.type = 'password';
+                    if (toggle) { toggle.textContent = '显示'; }
+                    submit.focus();
+                });
+            });
+
+            if (toggle && password) {
+                toggle.addEventListener('click', function () {
+                    var show = password.type === 'password';
+                    password.type = show ? 'text' : 'password';
+                    toggle.textContent = show ? '隐藏' : '显示';
+                    password.focus();
+                });
+            }
+        })();
+    </script>
+}

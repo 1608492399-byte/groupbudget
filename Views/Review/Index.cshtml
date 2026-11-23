@@ -1,0 +1,68 @@
+@model IEnumerable<FilingForm>
+@using GroupBudget.Models
+@{
+    ViewData["Title"] = "集团审核";
+    var current = ViewBag.CurrentStatus as string;
+    var batches = ViewBag.Batches as List<BudgetBatch> ?? new List<BudgetBatch>();
+    var currentBatchId = ViewBag.CurrentBatchId is int batchId ? batchId : 0;
+}
+<h2 class="mb-3">集团审核</h2>
+<div class="btn-group mb-3">
+    <a class="btn btn-sm @(string.IsNullOrEmpty(current) ? "btn-primary" : "btn-outline-primary")" asp-action="Index">全部</a>
+    <a class="btn btn-sm @(current == FormStatus.Submitted ? "btn-primary" : "btn-outline-primary")" asp-action="Index" asp-route-status="@FormStatus.Submitted">待审核</a>
+    <a class="btn btn-sm @(current == FormStatus.Approved ? "btn-primary" : "btn-outline-primary")" asp-action="Index" asp-route-status="@FormStatus.Approved">已通过</a>
+    <a class="btn btn-sm @(current == FormStatus.Returned ? "btn-primary" : "btn-outline-primary")" asp-action="Index" asp-route-status="@FormStatus.Returned">已打回</a>
+    <form asp-controller="Export" asp-action="All" method="get" class="d-inline-flex align-items-center gap-2 ms-2">
+        <select name="batchId" class="form-select form-select-sm" aria-label="选择导出批次">
+            @if (batches.Count == 0)
+            {
+                <option value="0">全部批次</option>
+            }
+            @foreach (var batch in batches)
+            {
+                <option value="@batch.Id" selected="@(currentBatchId == batch.Id ? "selected" : null)">@batch.Name（@batch.PlanYear）</option>
+            }
+        </select>
+        <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">按批次导出</button>
+    </form>
+    <a class="btn btn-sm btn-outline-secondary ms-2" asp-controller="Export" asp-action="All">导出全部批次 CSV</a>
+</div>
+
+<table class="table table-striped align-middle">
+    <thead>
+        <tr>
+            <th>部门</th>
+            <th>批次</th>
+            <th>单据编号</th>
+            <th>状态</th>
+            <th>版本</th>
+            <th>提交人 / 时间</th>
+            <th>审核人 / 时间</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var item in Model)
+    {
+        <tr>
+            <td>@item.Organization.Name</td>
+            <td>@item.BudgetBatch.Name</td>
+            <td>@item.FormNumber</td>
+            <td>
+                @if (item.Status == FormStatus.Approved) { <span class="badge bg-success">@item.Status</span> }
+                else if (item.Status == FormStatus.Submitted) { <span class="badge bg-primary">@item.Status</span> }
+                else if (item.Status == FormStatus.Returned) { <span class="badge bg-danger">@item.Status</span> }
+                else { <span class="badge bg-secondary">@item.Status</span> }
+            </td>
+            <td>V@(item.VersionNumber)</td>
+            <td class="small">@item.SubmittedBy<br />@(item.SubmittedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+            <td class="small">@item.ReviewedBy<br />@(item.ReviewedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+            <td><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-id="@item.Id">查看 / 审核</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+@if (!Model.Any())
+{
+    <div class="alert alert-info">当前筛选条件下没有单据。</div>
+}

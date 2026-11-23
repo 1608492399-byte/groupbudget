@@ -1,0 +1,22 @@
+## 构建产物
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+## 数据库：含真实财务数据，绝不入库、绝不进镜像
+app.db
+app.db-*
+app.db.bak*
+*.db-wal
+*.db-shm
+
+## 本地密钥与配置
+appsettings.Local.json
+secrets.json
+
+## 其他
+.DS_Store
+Thumbs.db
+*.log

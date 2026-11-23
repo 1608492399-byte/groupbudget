@@ -1,0 +1,324 @@
+@model GroupBudget.ViewModels.ExecutionAnalysisViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "执行分析";
+    ViewData["BodyClass"] = "home-body";
+
+    var batch = Model.Batch;
+    var circumference = 2m * (decimal)Math.PI * 50m;
+    var ringDash = Math.Round(Math.Min(Model.ExecRate ?? 0m, 1m) * circumference, 1);
+    var dashArray = ringDash.ToString("0.#", CultureInfo.InvariantCulture) + " " + circumference.ToString("0.#", CultureInfo.InvariantCulture);
+    var execScale = Model.ExecScale;
+
+    Func<decimal?, string> pct = v => v == null ? "—" : (v.Value * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+    Func<decimal?, string> pctSigned = v => v == null ? "—" : (v.Value > 0 ? "+" : "") + (v.Value * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+    Func<decimal, string> money = v => v.ToString("N2", CultureInfo.InvariantCulture);
+    Func<decimal, string> width = v => (Math.Min(Math.Abs(v), 1m) * 100m).ToString("0.##", CultureInfo.InvariantCulture);
+    Func<decimal?, string> changeClass = v => v == null ? "muted" : v.Value > 0 ? "up" : v.Value < 0 ? "down" : "muted";
+
+    var topAmountScale = Model.TopSubjects.Select(s => Math.Abs(s.ChangeAmount)).DefaultIfEmpty(0m).Max();
+    var clippedDepartments = Model.Departments.Count(d => d.ChangeRate != null && Math.Abs(d.ChangeRate.Value) > 1m);
+}
+
+<div class="viz-page">
+
+    <header class="viz-head">
+        <div>
+            <p class="eyebrow">管理员 · 预算分析</p>
+            <h1>预算执行与增减</h1>
+            <p class="sub">
+                @if (batch != null)
+                {
+                    <b>@batch.Name</b>
+                    <text> · 基准年 @batch.BaselineYear ／ 编制年 @batch.PlanYear · 基准版本 V@(batch.CurrentBaselineVersion)</text>
+                }
+                else
+                {
+                    <text>尚未创建批次</text>
+                }
+            </p>
+        </div>
+        <div class="head-actions">
+            <a class="viz-btn" asp-controller="Summary" asp-action="Index">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" /></svg>
+                集团汇总表
+            </a>
+            <a class="viz-btn" asp-controller="Admin" asp-action="Index">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4z" /><path d="M4 12l8 4 8-4M4 17l8 4 8-4" /></svg>
+                批次与基准
+            </a>
+            <button type="button" class="viz-btn" onclick="window.print()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V3h10v5" /><rect x="4" y="8" width="16" height="8" rx="2" /><path d="M7 16h10v5H7z" /></svg>
+                打印
+            </button>
+        </div>
+    </header>
+
+    @if (batch == null)
+    {
+        <div class="viz-empty">尚未创建批次。请先在「批次与基准」中创建批次并录入基准数据，再回到本页查看分析。</div>
+    }
+    else
+    {
+        <!-- ================= KPI ================= -->
+        <section class="viz-kpi" aria-label="关键指标">
+            <div class="kpi kpi-ring">
+                <svg class="donut" viewBox="0 0 120 120" role="img"
+                     aria-label="2026 年 1–10 月预算执行率 @pct(Model.ExecRate)">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#eef0f3" stroke-width="9" />
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#11161b" stroke-width="9"
+                            stroke-linecap="round" transform="rotate(-90 60 60)"
+                            stroke-dasharray="@dashArray" />
+                </svg>
+                <div class="ring-text">
+                    <div class="k">@batch.BaselineYear 年 1–10 月执行率</div>
+                    <div class="v">@pct(Model.ExecRate)</div>
+                    <div class="note">决算 ÷ 预算，未年化</div>
+                </div>
+            </div>
+
+            <div class="kpi">
+                <div class="k">@batch.BaselineYear 年预算合计</div>
+                <div class="v">@money(Model.BudgetTotal)<small>元</small></div>
+                <div class="note">基本 + 项目 · @Model.Departments.Count 个部门</div>
+            </div>
+
+            <div class="kpi">
+                <div class="k">@batch.BaselineYear 年决算合计</div>
+                <div class="v">@money(Model.ActualTotal)<small>元</small></div>
+                <div class="note">
+                    <span class="tag @(Model.OverBudgetDepartments > 0 ? "tag-warn" : "tag-flat")">超预算 @Model.OverBudgetDepartments 个部门</span>
+                </div>
+            </div>
+
+            <div class="kpi">
+                <div class="k">@batch.PlanYear 年预算合计</div>
+                <div class="v">@money(Model.PlanTotal)<small>元</small></div>
+                <div class="note">
+                    @if (Model.HasPlan)
+                    {
+                        <text>较 @batch.BaselineYear 决算</text>
+                        <span class="tag @(Model.PlanChangeAmount > 0 ? "tag-up" : Model.PlanChangeAmount < 0 ? "tag-down" : "tag-flat")">@pctSigned(Model.PlanChangeRate)</span>
+                    }
+                    else
+                    {
+                        <span class="tag tag-flat">待部门填报</span>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= 执行率 ================= -->
+        <section class="viz-card">
+            <div class="viz-card-head">
+                <div>
+                    <h2>部门预算执行率</h2>
+                    <div class="hint">@batch.BaselineYear 年决算 ÷ 预算；竖线为 100%，越过竖线即超预算</div>                </div>
+                <div class="legend">
+                    <span class="lg-muted"><i></i>预算内</span>
+                    <span class="lg-up"><i></i>超预算</span>
+                </div>
+            </div>
+
+            <div class="bars">
+                @foreach (var d in Model.Departments)
+                {
+                    var w = d.ExecRate == null ? 0m : d.ExecRate.Value / execScale;
+                    <div class="bar-row" title="@d.Name — 预算 @money(d.Budget) 元，决算 @money(d.Actual) 元，执行率 @pct(d.ExecRate)">
+                        <div class="name">@d.Name</div>
+                        <div class="bar-track">
+                            @if (d.ExecRate != null)
+                            {
+                                <div class="bar-fill @(d.ExecRate > 1m ? "over" : "")" style="width:@( (w * 100m).ToString("0.##", CultureInfo.InvariantCulture) )%"></div>
+                            }
+                            <div class="ref" style="left:@( (100m / execScale).ToString("0.##", CultureInfo.InvariantCulture) )%"></div>
+                        </div>
+                        <div class="bar-value">
+                            <b class="@(d.ExecRate > 1m ? "up" : "")">@pct(d.ExecRate)</b>
+                            <span>决算 @money(d.Actual)</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (Model.NoBudgetDepartments > 0)
+            {
+                <div class="hint" style="margin-top:12px">
+                    有 @Model.NoBudgetDepartments 个部门本年预算为 0，执行率无法计算（显示「—」），其决算仍计入部门合计。
+                </div>
+            }
+            <div class="hint" style="margin-top:8px">
+                人员费用已归口人事部：人事部的预算与决算都包含全集团人员费用，其余部门只统计本部门非人员费用，各部门合计与集团实际发生额一致。
+            </div>
+            <div class="hint" style="margin-top:8px">
+                按科目口径，共 @Model.OverBudgetSubjects 个科目决算超过预算（科目级执行率可在「集团汇总表」逐行查看）。
+            </div>
+        </section>
+
+        <!-- ================= 增减率 ================= -->
+        <section class="viz-card">
+            <div class="viz-card-head">
+                <div>
+                    <h2>部门增减比例</h2>
+                    <div class="hint">（@batch.PlanYear 年预算 − @batch.BaselineYear 年决算）÷ @batch.BaselineYear 年决算；中线为 0</div>
+                </div>
+                <div class="legend">
+                    <span class="lg-down"><i></i>减少</span>
+                    <span class="lg-up"><i></i>增加</span>
+                </div>
+            </div>
+
+            <div class="bars">
+                @foreach (var d in Model.Departments)
+                {
+                    var rate = d.ChangeRate;
+                    <div class="div-row" title="@d.Name — 比 @batch.BaselineYear 年决算 @(d.ChangeAmount >= 0 ? "增加" : "减少") @money(Math.Abs(d.ChangeAmount)) 元（@pctSigned(rate)）">
+                        <div class="name">@d.Name</div>
+                        <div class="div-track">
+                            <div class="div-half div-neg">
+                                @if (rate != null && rate < 0)
+                                {
+                                    <i class="@(Math.Abs(rate.Value) > 1m ? "clip" : "")" style="width:@(width(rate.Value))%"></i>
+                                }
+                            </div>
+                            <div class="div-half div-pos">
+                                @if (rate != null && rate > 0)
+                                {
+                                    <i class="@(Math.Abs(rate.Value) > 1m ? "clip" : "")" style="width:@(width(rate.Value))%"></i>
+                                }
+                            </div>
+                        </div>
+                        <div class="bar-value">
+                            <b class="@changeClass(rate)">@pctSigned(rate)</b>
+                            <span class="@changeClass(rate)">@(d.ChangeAmount > 0 ? "+" : "")@money(d.ChangeAmount)</span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="hint" style="margin-top:12px">
+                半幅代表 100%；超过 ±100% 的比例按端点截断并用斜纹标记，真实比例见右侧数值@(clippedDepartments > 0 ? $"，共 {clippedDepartments} 个部门超出刻度。" : "。" )
+            </div>
+            @if (!Model.HasPlan)
+            {
+                <div class="hint" style="margin-top:8px">
+                    @batch.PlanYear 年预算尚未填报（当前为 0），各部门增减比例均为 −100%，填报后即可恢复正常对比。
+                </div>
+            }
+        </section>
+
+        <!-- ================= 费用类别 ================= -->
+        <section class="viz-card">
+            <div class="viz-card-head">
+                <div>
+                    <h2>费用类别对照</h2>
+                    <div class="hint">按费用类别汇总，执行率与增减比例同行对比</div>
+                </div>
+            </div>
+
+            <div class="viz-table-wrap">
+            <table class="viz-table">
+                <thead>
+                    <tr>
+                        <th>费用类别</th>
+                        <th>@batch.BaselineYear 预算</th>
+                        <th>@batch.BaselineYear 决算</th>
+                        <th style="width:160px">执行率</th>
+                        <th>@batch.PlanYear 预算</th>
+                        <th style="width:170px">增减比例</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Categories)
+                    {
+                        <tr>
+                            <td>@c.Name</td>
+                            <td class="num">@money(c.Budget)</td>
+                            <td class="num">@money(c.Actual)</td>
+                            <td>
+                                <div class="cell-bar">
+                                    <span class="mini"><i class="@(c.ExecRate > 1m ? "over" : "")" style="width:@(c.ExecRate == null ? "0" : (c.ExecRate.Value / execScale * 100m).ToString("0.##", CultureInfo.InvariantCulture))%"></i></span>
+                                    <b class="@(c.ExecRate > 1m ? "up" : "")">@pct(c.ExecRate)</b>
+                                </div>
+                            </td>
+                            <td class="num">@money(c.Plan)</td>
+                            <td>
+                                <div class="cell-bar">
+                                    <span class="mini"><i class="@(c.ChangeAmount > 0 ? "upfill" : "downfill")" style="width:@(c.ChangeRate == null ? "0" : width(c.ChangeRate.Value))%"></i></span>
+                                    <b class="@changeClass(c.ChangeRate)">@pctSigned(c.ChangeRate)</b>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>合计</td>
+                        <td>@money(Model.BudgetTotal)</td>
+                        <td>@money(Model.ActualTotal)</td>
+                        <td>@pct(Model.ExecRate)</td>
+                        <td>@money(Model.PlanTotal)</td>
+                        <td class="@changeClass(Model.PlanChangeRate)">@pctSigned(Model.PlanChangeRate)</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div class="scroll-hint">表格较宽，可左右滑动查看完整列</div>
+            </div>
+        </section>
+
+        <!-- ================= 科目波动 ================= -->
+        <section class="viz-card">
+            <div class="viz-card-head">
+                <div>
+                    <h2>波动最大的科目</h2>
+                    <div class="hint">按增减额绝对值排序，取前 10 个科目</div>
+                </div>
+                <div class="legend">
+                    <span>增减额条按最大波动额等比缩放</span>
+                </div>
+            </div>
+
+            <div class="viz-table-wrap">
+            <table class="viz-table">
+                <thead>
+                    <tr>
+                        <th>预算科目</th>
+                        <th>费用类别</th>
+                        <th>@batch.BaselineYear 决算</th>
+                        <th>@batch.PlanYear 预算</th>
+                        <th>增减额</th>
+                        <th style="width:180px">增减比例</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.TopSubjects)
+                    {
+                        var w = topAmountScale == 0m ? 0m : Math.Abs(s.ChangeAmount) / topAmountScale;
+                        <tr title="执行率 @pct(s.ExecRate)（预算 @money(s.Budget) 元）">
+                            <td>@s.Name</td>
+                            <td class="cat">@s.Note</td>
+                            <td class="num">@money(s.Actual)</td>
+                            <td class="num">@money(s.Plan)</td>
+                            <td class="@changeClass(s.ChangeAmount)">
+                                @(s.ChangeAmount > 0 ? "+" : "")@money(s.ChangeAmount)
+                                <div class="mini" style="width:120px;margin:5px 0 0 auto">
+                                    <i class="@(s.ChangeAmount > 0 ? "upfill" : "downfill")" style="width:@( (w * 100m).ToString("0.##", CultureInfo.InvariantCulture) )%"></i>
+                                </div>
+                            </td>
+                            <td class="@changeClass(s.ChangeRate)"><b>@pctSigned(s.ChangeRate)</b></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <div class="scroll-hint">表格较宽，可左右滑动查看完整列</div>
+            </div>
+        </section>
+
+        <div class="viz-foot">
+            <div><b>执行率</b> ＝ @batch.BaselineYear 年决算（基本＋项目）÷ @batch.BaselineYear 年预算（基本＋项目）；决算数据为 1–10 月实际发生数，<b>未按 12 个月年化</b>，因此整体执行率偏低属正常。</div>
+            <div><b>口径</b>：全部数据取「实际发生数」明细全量 @money(Model.ActualTotal) 元；人员费用按预算归属统一计入人事部，集团合计与各部门合计一致。</div>
+            <div><b>增减比例</b> ＝（@batch.PlanYear 年预算 − @batch.BaselineYear 年决算）÷ @batch.BaselineYear 年决算，比较基数与填报页「较上年决算增减」完全一致。</div>
+            <div><b>颜色</b>：金额增加为红、减少为绿；执行率超过 100% 的条形转红表示超预算。</div>
+            <div><b>提示</b>：@batch.PlanYear 年预算已清空，等待各部门重新填报；填报前增减比例不具参考意义。</div>
+        </div>
+    }
+</div>

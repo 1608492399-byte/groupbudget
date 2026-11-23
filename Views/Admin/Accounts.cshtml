@@ -1,0 +1,17 @@
+@{
+    ViewData["Title"] = "演示账号";
+    var demoBindings = ViewBag.DemoBindings as Dictionary<string, string> ?? new Dictionary<string, string>();
+}
+<h2 class="mb-3">演示账号</h2>
+<p class="text-muted">以下为本地演示用账号，由系统启动时自动创建。<strong>正式上线前请删除或改密，并关闭自注册入口。</strong></p>
+<table class="table table-bordered" style="max-width:720px">
+    <thead class="table-light"><tr><th>角色</th><th>账号</th><th>绑定部门</th><th>初始密码</th><th>可做什么</th></tr></thead>
+    <tbody>
+        <tr><td>系统管理员</td><td><code>admin@group.local</code></td><td>@(demoBindings.GetValueOrDefault("admin@group.local", "未注册 / 未绑定"))</td><td><code>Admin@123</code></td><td>建批次、录入并下发基准、变更批次状态</td></tr>
+        <tr><td>集团审核员</td><td><code>reviewer@group.local</code></td><td>@(demoBindings.GetValueOrDefault("reviewer@group.local", "未注册 / 未绑定"))</td><td><code>Review@123</code></td><td>查看全部部门、审核通过 / 打回（必填意见）、导出汇总</td></tr>
+        <tr><td>部门填报员</td><td><code>filler@group.local</code></td><td>@(demoBindings.GetValueOrDefault("filler@group.local", "未注册 / 未绑定"))</td><td><code>Fill@123</code></td><td>只看绑定部门，只填 2027 预算数</td></tr>
+    </tbody>
+</table>
+<div class="alert alert-info" style="max-width:720px">
+    验证主线：用填报员改一个科目金额（例如把某行 2027 预算数改成决算数的 2 倍）→ 不填原因直接提交，应被拦截 → 补原因后提交 → 换审核员打回（不填意见应被拦截）→ 填报员修改后重新提交 → 审核通过 → 再尝试修改应被拒绝。
+</div>

@@ -1,0 +1,176 @@
+@model ActualImportPageViewModel
+@{
+    ViewData["Title"] = "决算导入";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">决算导入</h2>
+    <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Index">返回管理员页</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.Message))
+{
+    <div class="alert alert-info">@Model.Message</div>
+}
+@if (!Model.HasSubjectMappings)
+{
+    <div class="alert alert-warning">
+        附表7 决算导入需要先配置会计科目映射，否则每一行都会被判为未映射。下方的「执行情况明细导入」不需要这一步。
+        <a href="#subject-mapping-config" class="alert-link">前往配置会计科目映射</a>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold">上传附表7决算文件</span>
+        <a class="btn btn-sm btn-outline-primary" asp-action="DownloadTemplate">下载 Excel 导入模板</a>
+    </div>
+    <div class="card-body">
+        <form asp-action="Preview" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label" for="budgetBatchId">预算批次</label>
+                <select id="budgetBatchId" name="budgetBatchId" class="form-select" required>
+                    <option value="">请选择批次</option>
+                    @foreach (var batch in Model.Batches)
+                    {
+                        <option value="@batch.Id" selected="@(Model.SelectedBatchId == batch.Id)">
+                            @batch.Name（基准年 @batch.BaselineYear）
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label" for="file">Excel 文件（.xls / .xlsx，最大 20 MB）</label>
+                <input id="file" name="file" type="file" accept=".xls,.xlsx" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100" @(Model.HasSubjectMappings ? null : "disabled")>上传并预览</button>
+            </div>
+            <div class="col-12 form-text">
+                默认选择工作表名称包含「附表7」的 sheet；可在预览页切换。确认前不会写入决算明细或基准。
+                没有现成原表时，可点右上角「下载 Excel 导入模板」，按「填写说明」页填好后上传；模板里已内置部门与费用属性下拉。
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header fw-bold">执行情况明细导入（如 2026 年 1—10 月实际发生数）</div>
+    <div class="card-body">
+        <form asp-action="PreviewExecution" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label" for="executionBatchId">预算批次</label>
+                <select id="executionBatchId" name="budgetBatchId" class="form-select" required>
+                    <option value="">请选择批次</option>
+                    @foreach (var batch in Model.Batches)
+                    {
+                        <option value="@batch.Id" selected="@(Model.SelectedBatchId == batch.Id)">
+                            @batch.Name（基准年 @batch.BaselineYear）
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label" for="executionFile">Excel 文件（.xls / .xlsx，最大 20 MB）</label>
+                <input id="executionFile" name="file" type="file" accept=".xls,.xlsx" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-success w-100">上传并预览</button>
+            </div>
+            <div class="col-12 form-text">
+                适用于「各部门实际发生数」格式，按列名自动识别（部门 / 期间 / 会计年度 / 科目全名 / 费用类别 / 预算科目2 / 借方金额），
+                不需要先配置会计科目映射。部门历史叫法（投资1部、行政部、人事部门）与科目名称差异会自动转换；
+                账上出现但预算表里没有的科目（如各部门的工资、社保）会自动补建基准行，金额记入「2026 决算数」，费用属性统一按基本支出。
+                同批次重复导入需选择覆盖。
+            </div>
+        </form>
+    </div>
+</div>
+
+<section id="subject-mapping-config" class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold">会计科目映射配置</span>
+        <a class="btn btn-sm btn-outline-primary" asp-action="DownloadMappingTemplate">下载映射模板</a>
+    </div>
+    <div class="card-body">
+        @if (TempData["MappingMessage"] is string mappingMessage)
+        {
+            <div class="alert alert-info">@mappingMessage</div>
+        }
+        @if (TempData["MappingErrors"] is string mappingErrors && !string.IsNullOrWhiteSpace(mappingErrors))
+        {
+            <div class="alert alert-warning">
+                <div class="fw-bold mb-1">未导入的行：</div>
+                <pre class="mb-0 small" style="white-space:pre-wrap">@mappingErrors</pre>
+            </div>
+        }
+
+        <form asp-action="ImportSubjectMappings" method="post" enctype="multipart/form-data"
+              class="row g-2 align-items-end mb-4 pb-3 border-bottom">
+            <div class="col-md-4">
+                <label class="form-label" for="mappingFile">批量导入映射（.xls / .xlsx）</label>
+                <input id="mappingFile" name="file" type="file" accept=".xls,.xlsx" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-success">批量导入映射</button>
+            </div>
+            <div class="col-md-5 form-text mb-0">
+                按模板填写「会计科目名称 + 预算科目编码/名称 + 费用属性」；同一会计科目重复导入按更新处理，无需逐条录入。
+            </div>
+        </form>
+
+        <form asp-action="SaveSubjectMapping" method="post" class="row g-2 align-items-end mb-4">
+            <div class="col-md-4">
+                <label class="form-label">Excel 会计科目名称</label>
+                <input name="accountingSubjectName" maxlength="200" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">预算科目</label>
+                <select name="subjectId" class="form-select" required>
+                    <option value="">请选择预算科目</option>
+                    @foreach (var subject in Model.Subjects)
+                    {
+                        <option value="@subject.Id">@subject.Code - @subject.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">费用属性</label>
+                <select name="expenseType" class="form-select" required>
+                    <option value="基本支出">基本支出</option>
+                    <option value="项目支出">项目支出</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">备注</label>
+                <input name="remarks" maxlength="500" class="form-control" />
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-outline-primary w-100">保存</button>
+            </div>
+        </form>
+
+        @if (Model.SubjectMappings.Count == 0)
+        {
+            <p class="text-muted mb-0">尚无会计科目映射。请逐项添加 Excel 会计科目与预算科目的对应关系。</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light"><tr><th>会计科目名称</th><th>预算科目</th><th>费用属性</th><th>备注</th></tr></thead>
+                    <tbody>
+                    @foreach (var mapping in Model.SubjectMappings)
+                    {
+                        <tr>
+                            <td>@mapping.AccountingSubjectName</td>
+                            <td>@mapping.Subject.Code - @mapping.Subject.Name</td>
+                            <td>@mapping.ExpenseType</td>
+                            <td>@mapping.Remarks</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</section>

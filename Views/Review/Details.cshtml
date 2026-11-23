@@ -1,0 +1,153 @@
+@model FilingEditViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "审核填报单";
+    var reviews = ViewBag.Reviews as List<ReviewRecord> ?? new List<ReviewRecord>();
+    var versions = ViewBag.FormVersions as List<FormVersion> ?? new List<FormVersion>();
+    var subjectNames = ViewBag.SubjectNames as Dictionary<int, string> ?? new Dictionary<int, string>();
+    // 展示按时间倒序（最新在前），但「上一版」必须按版本号升序找
+    var versionsAsc = versions.OrderBy(x => x.VersionNumber).ThenBy(x => x.Id).ToList();
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="mb-1">审核填报单</h2>
+        <div class="text-muted small">@Model.BatchName · @Model.OrganizationName · @Model.FormNumber · V@(Model.VersionNumber)</div>
+    </div>
+    <div>
+        <a class="btn btn-outline-primary" asp-controller="Version" asp-action="Compare" asp-route-formId="@Model.FilingFormId">版本对比</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">返回列表</a>
+    </div>
+</div>
+
+<div class="alert alert-secondary py-2">
+    当前状态：<strong>@Model.Status</strong>。审核员可查看全部部门数据，但<strong>不能修改任何金额</strong>；金额修改接口对审核角色不开放。
+</div>
+
+<div class="table-responsive">
+    @await Html.PartialAsync("_ReportLines", Model)
+</div>
+
+@if (Model.Status == FormStatus.Submitted)
+{
+    <div class="card mt-4" style="max-width:640px">
+        <div class="card-header fw-bold">审核结论</div>
+        <div class="card-body">
+            <form asp-action="Approve" asp-route-id="@Model.FilingFormId" method="post" class="d-inline">
+                <button type="submit" class="btn btn-success" onclick="return confirm('通过后单据将永久锁定，确认？');">审核通过</button>
+            </form>
+            <form asp-action="Return" asp-route-id="@Model.FilingFormId" method="post" class="mt-3">
+                <label class="form-label">打回意见（<strong class="text-danger">必填</strong>）</label>
+                <textarea name="comments" class="form-control mb-2" rows="3" placeholder="请写明需要修改的科目和原因"></textarea>
+                <button type="submit" class="btn btn-danger">打回修改</button>
+            </form>
+        </div>
+    </div>
+}
+
+<div class="card mt-4">
+    <div class="card-header fw-bold">审核流水（只增不改）</div>
+    <div class="card-body p-0">
+        @if (!reviews.Any())
+        {
+            <div class="p-3 text-muted small">暂无审核记录。</div>
+        }
+        else
+        {
+            <table class="table table-sm mb-0">
+                <thead><tr><th>时间</th><th>结论</th><th>审核人</th><th>意见</th><th>版本</th></tr></thead>
+                <tbody>
+                @foreach (var r in reviews)
+                {
+                    <tr>
+                        <td>@r.ReviewedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@r.Decision</td>
+                        <td>@r.ReviewerName</td>
+                        <td>@r.Comments</td>
+                        <td>V@(r.VersionNumber)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header fw-bold">历史版本（只读）</div>
+    @if (!versions.Any())
+    {
+        <div class="card-body text-muted">暂无历史版本快照。</div>
+    }
+    else
+    {
+        <div class="list-group list-group-flush">
+        @for (var i = 0; i < versions.Count; i++)
+        {
+            var version = versions[i];
+            using var snapshot = JsonDocument.Parse(version.SnapshotJson);
+            <details class="list-group-item">
+                <summary class="d-flex flex-wrap gap-3">
+                    <span>V@(version.VersionNumber)</span>
+                    <span>@version.Action</span>
+                    <span>操作人：@(version.Operator ?? "—")</span>
+                    <span>时间：@version.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                    <span>打回意见：@(version.Action == "打回" ? version.Comments ?? "—" : "—")</span>
+                </summary>
+                <div class="mt-2 d-flex gap-2">
+                    @{
+                        var ascIndex = versionsAsc.FindIndex(x => x.Id == version.Id);
+                        var prevVersion = ascIndex > 0 ? versionsAsc[ascIndex - 1] : null;
+                    }
+                    @if (prevVersion is not null)
+                    {
+                        <a class="btn btn-sm btn-outline-primary"
+                           asp-controller="Version" asp-action="Compare"
+                           asp-route-formId="@Model.FilingFormId"
+                           asp-route-from="@prevVersion.VersionNumber" asp-route-to="@version.VersionNumber">与上一版对比（V@(prevVersion.VersionNumber)）</a>
+                    }
+                    @if (ascIndex > 1)
+                    {
+                        <a class="btn btn-sm btn-outline-secondary"
+                           asp-controller="Version" asp-action="Compare"
+                           asp-route-formId="@Model.FilingFormId"
+                           asp-route-from="@versionsAsc[0].VersionNumber" asp-route-to="@version.VersionNumber">与最初版对比</a>
+                    }
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>科目</th><th class="text-end">2026预算数</th><th class="text-end">2026决算数</th>
+                                <th class="text-end">2027预算数</th><th class="text-end">增减额</th>
+                                <th class="text-end">增幅</th><th>增减原因</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var line in snapshot.RootElement.EnumerateArray())
+                        {
+                            var subjectId = line.GetProperty("SubjectId").GetInt32();
+                            var budget2026 = line.GetProperty("Budget2026").GetDecimal();
+                            var actual2026 = line.GetProperty("Actual2026").GetDecimal();
+                            var budget2027 = line.GetProperty("Budget2027").GetDecimal();
+                            var change = BudgetCalculator.Change(budget2027, actual2026);
+                            var rate = BudgetCalculator.Rate(budget2027, actual2026);
+                            var reasonElement = line.GetProperty("Reason");
+                            var reason = reasonElement.ValueKind == JsonValueKind.Null ? "" : reasonElement.GetString();
+                            <tr>
+                                <td>@subjectNames.GetValueOrDefault(subjectId, $"科目ID {subjectId}")</td>
+                                <td class="text-end">@budget2026.ToString("N2")</td>
+                                <td class="text-end">@actual2026.ToString("N2")</td>
+                                <td class="text-end">@budget2027.ToString("N2")</td>
+                                <td class="text-end">@change.ToString("N2")</td>
+                                <td class="text-end">@(rate.HasValue ? rate.Value.ToString("P2") : "—")</td>
+                                <td>@reason</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+        </div>
+    }
+</div>

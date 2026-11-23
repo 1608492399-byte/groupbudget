@@ -1,0 +1,192 @@
+@model ActualDetailPageViewModel
+@{
+    ViewData["Title"] = "决算明细";
+    string Money(decimal v) => v == 0m ? "-" : v.ToString("N2");
+    var locked = Model.OrganizationLocked;
+}
+
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-1">@Model.BaselineYear 年决算明细（钻取）</h2>
+        <div class="text-muted small">
+            单位：元 · 批次：@Model.BatchName · 部门：<span class="fw-semibold">@Model.OrganizationName</span> · 科目：<span class="fw-semibold">@Model.SubjectName</span>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="javascript:history.back()">返回</a>
+        <a class="btn btn-outline-primary btn-sm"
+           asp-action="Export"
+           asp-route-batchId="@Model.BatchId"
+           asp-route-orgId="@Model.OrganizationId"
+           asp-route-subjectId="@Model.SubjectId"
+           asp-route-period="@Model.Period"
+           asp-route-expenseType="@Model.ExpenseType">导出 CSV</a>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-end">
+            <input type="hidden" name="batchId" value="@Model.BatchId" />
+            <input type="hidden" name="subjectId" value="@Model.SubjectId" />
+            @if (!locked)
+            {
+                <div class="col-auto">
+                    <label class="form-label small mb-1">部门</label>
+                    <select name="orgId" class="form-select form-select-sm" style="min-width:150px"
+                            onchange="this.form.submit()">
+                        <option value="">全部部门</option>
+                        @foreach (var org in Model.Organizations)
+                        {
+                            <option value="@org.Id" selected="@(Model.OrganizationId == org.Id)">@org.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="col-auto">
+                <label class="form-label small mb-1">会计期间</label>
+                <select name="period" class="form-select form-select-sm" style="min-width:130px"
+                        onchange="this.form.submit()">
+                    <option value="">全部期间</option>
+                    @foreach (var p in Model.Periods)
+                    {
+                        <option value="@p" selected="@(Model.Period == p)">@p</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-1">费用属性</label>
+                <select name="expenseType" class="form-select form-select-sm" style="min-width:120px"
+                        onchange="this.form.submit()">
+                    <option value="">全部</option>
+                    <option value="基本支出" selected="@(Model.ExpenseType == "基本支出")">基本支出</option>
+                    <option value="项目支出" selected="@(Model.ExpenseType == "项目支出")">项目支出</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary">查询</button>
+                <a class="btn btn-sm btn-outline-secondary"
+                   asp-action="Index"
+                   asp-route-batchId="@Model.BatchId"
+                   asp-route-orgId="@Model.OrganizationId"
+                   asp-route-subjectId="@Model.SubjectId">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="text-muted small">凭证笔数</div>
+            <div class="fs-5 fw-semibold">@Model.RecordCount 笔</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="text-muted small">借方金额合计</div>
+            <div class="fs-5 fw-semibold">@Model.AccountTotal.ToString("N2")</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="text-muted small">审定金额合计（决算口径）</div>
+            <div class="fs-5 fw-semibold text-primary">@Model.ApprovedTotal.ToString("N2")</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="text-muted small">填报单决算数</div>
+            @if (Model.LineActual.HasValue)
+            {
+                <div class="fs-5 fw-semibold">@Model.LineActual.Value.ToString("N2")</div>
+                <div class="small @(Model.Difference == 0m ? "text-success" : "text-danger")">
+                    差额 @Model.Difference!.Value.ToString("N2")
+                </div>
+            }
+            else
+            {
+                <div class="fs-5 fw-semibold text-muted">—</div>
+                <div class="small text-muted">选定部门+科目、且不筛期间时比对</div>
+            }
+        </div></div>
+    </div>
+</div>
+
+@if (Model.RecordCount == 0)
+{
+    <div class="alert alert-warning">
+        当前筛选条件下没有决算明细。可能是该科目在 @Model.BaselineYear 年没有发生额，或导入的明细未覆盖该部门。
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered table-hover align-middle mb-2">
+            <thead class="table-light text-center">
+                <tr>
+                    <th style="width:100px">日期</th>
+                    <th style="width:90px">会计期间</th>
+                    <th style="width:110px">凭证号</th>
+                    <th style="min-width:110px">部门</th>
+                    <th style="min-width:120px">预算科目</th>
+                    <th style="min-width:240px">会计科目全名</th>
+                    <th style="width:90px">费用属性</th>
+                    <th style="width:120px">借方金额</th>
+                    <th style="width:110px">调整金额</th>
+                    <th style="width:120px">审定金额</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td class="text-center">@(row.VoucherDate?.ToString("yyyy-MM-dd") ?? "-")</td>
+                        <td class="text-center">@row.AccountingPeriod</td>
+                        <td class="text-center">@(string.IsNullOrWhiteSpace(row.VoucherNumber) ? "-" : row.VoucherNumber)</td>
+                        <td>@row.OrganizationName</td>
+                        <td>@row.SubjectName</td>
+                        <td class="text-muted small">@row.AccountingSubjectName</td>
+                        <td class="text-center">@row.ExpenseType</td>
+                        <td class="text-end">@Money(row.AccountAmount)</td>
+                        <td class="text-end">@Money(row.AdjustmentAmount)</td>
+                        <td class="text-end fw-semibold">@Money(row.ApprovedAmount)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="table-light fw-semibold">
+                <tr>
+                    <td colspan="7" class="text-end">本页 / 全部合计</td>
+                    <td class="text-end">@Model.Rows.Sum(x => x.AccountAmount).ToString("N2") / @Model.AccountTotal.ToString("N2")</td>
+                    <td class="text-end">@Model.AdjustmentTotal.ToString("N2")</td>
+                    <td class="text-end">@Model.ApprovedTotal.ToString("N2")</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        <nav class="d-flex justify-content-between align-items-center">
+            <div class="small text-muted">共 @Model.RecordCount 笔，第 @Model.Page / @Model.TotalPages 页</div>
+            <div class="btn-group">
+                <a class="btn btn-sm btn-outline-secondary @(Model.Page <= 1 ? "disabled" : "")"
+                   asp-action="Index"
+                   asp-route-batchId="@Model.BatchId"
+                   asp-route-orgId="@Model.OrganizationId"
+                   asp-route-subjectId="@Model.SubjectId"
+                   asp-route-period="@Model.Period"
+                   asp-route-expenseType="@Model.ExpenseType"
+                   asp-route-page="@(Model.Page - 1)">上一页</a>
+                <a class="btn btn-sm btn-outline-secondary @(Model.Page >= Model.TotalPages ? "disabled" : "")"
+                   asp-action="Index"
+                   asp-route-batchId="@Model.BatchId"
+                   asp-route-orgId="@Model.OrganizationId"
+                   asp-route-subjectId="@Model.SubjectId"
+                   asp-route-period="@Model.Period"
+                   asp-route-expenseType="@Model.ExpenseType"
+                   asp-route-page="@(Model.Page + 1)">下一页</a>
+            </div>
+        </nav>
+    }
+}

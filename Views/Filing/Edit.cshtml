@@ -1,0 +1,475 @@
+@model FilingEditViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = Model.ReadOnly ? "查看填报单" : "填报 2027 年预算";
+    var expenseTypes = new[] { "基本支出", "项目支出" };
+    var zh = CultureInfo.GetCultureInfo("zh-CN");
+    Func<decimal, string> Money = v => v.ToString("N2", zh);
+    Func<decimal?, string> Pct = v => v.HasValue
+        ? (v.Value * 100m).ToString("0.00", CultureInfo.InvariantCulture) + "%"
+        : string.Empty;
+    Func<decimal, string> ChgClass = v => v > 0m ? "num num-up" : (v < 0m ? "num num-down" : "num");
+    var thresholdText = (Model.DeviationThreshold * 100m).ToString("0.##", CultureInfo.InvariantCulture);
+    var statusModifier = Model.Status switch
+    {
+        FormStatus.Approved => "approved",
+        FormStatus.Submitted => "submitted",
+        FormStatus.Returned => "returned",
+        _ => "draft"
+    };
+}
+
+<div class="sheet-page" data-sheet data-threshold="@Model.DeviationThreshold.ToString(CultureInfo.InvariantCulture)">
+    <header class="sheet-masthead">
+        <div>
+            <h1>@Model.PlanYear 年度部门费用预算表</h1>
+            <dl class="sheet-meta">
+                <div><dt>批次</dt><dd>@Model.BatchName</dd></div>
+                <div><dt>部门</dt><dd>@Model.OrganizationName</dd></div>
+                <div><dt>单据号</dt><dd>@Model.FormNumber</dd></div>
+                <div><dt>版本</dt><dd>V@(Model.VersionNumber)</dd></div>
+            </dl>
+        </div>
+        <span class="sheet-status sheet-status--@statusModifier">@Model.Status</span>
+    </header>
+
+    <p class="sheet-rule">
+        <strong>填报口径</strong>
+        <span>增减额 = @(Model.PlanYear) 年预算数 − @(Model.BaselineYear) 年决算数；较上年决算增减幅度超过 ±@(thresholdText)% 的科目，必须填写增减原因。</span>
+    </p>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ReturnReason))
+    {
+        <div class="sheet-notice" role="status">
+            <strong>集团打回意见</strong>
+            <span>@Model.ReturnReason</span>
+        </div>
+    }
+
+    <div asp-validation-summary="All" class="sheet-errors" role="alert"></div>
+
+    <form id="formEdit" asp-action="Edit" asp-route-id="@Model.FilingFormId" method="post" autocomplete="off">
+        @if (!Model.Lines.Any())
+        {
+            <div class="sheet-empty">本批次没有需要您填报的科目。如需调整科目范围，请联系集团财务管理员。</div>
+        }
+
+        <div class="sheet-viewport">
+            @foreach (var expenseType in expenseTypes)
+            {
+                var isBasic = expenseType == "基本支出";
+                var grouped = Model.Lines
+                    .Select((line, idx) => new { Line = line, Index = idx })
+                    .Where(x => x.Line.ExpenseType == expenseType)
+                    .GroupBy(x => x.Line.Category ?? "其他")
+                    .ToList();
+
+                if (grouped.Count == 0)
+                {
+                    continue;
+                }
+
+                var blockTotal = isBasic ? Model.BasicBudget2027 : Model.ProjectBudget2027;
+                var subjectCount = grouped.Sum(g => g.Count());
+
+                <div class="sheet-block-head">
+                    <h2>@expenseType<span class="count">@subjectCount 项</span></h2>
+                    <span class="block-total">
+                        @Model.PlanYear 年预算合计
+                        <b data-block-total="@expenseType">@Money(blockTotal)</b>
+                    </span>
+                </div>
+
+                <table class="sheet-table" data-expense="@expenseType" aria-label="@(expenseType)明细表">
+                    <colgroup>
+                        <col style="width:7%" />
+                        <col style="width:4%" />
+                        <col style="width:22%" />
+                        <col style="width:9.5%" />
+                        <col style="width:9.5%" />
+                        <col style="width:10%" />
+                        <col style="width:9.5%" />
+                        <col style="width:9%" />
+                        <col style="width:19.5%" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col">费用类别</th>
+                            <th scope="col">序号</th>
+                            <th scope="col" class="text-start">预算科目</th>
+                            <th scope="col" class="money-start">@(Model.BaselineYear) 预算数<span class="sub">只读</span></th>
+                            <th scope="col">@(Model.BaselineYear) 决算数<span class="sub">只读 · 可钻取</span></th>
+                            <th scope="col">@Model.PlanYear 预算数<span class="sub">待填报</span></th>
+                            <th scope="col">增减额<span class="sub">较上年决算</span></th>
+                            <th scope="col">增幅<span class="sub">较上年决算</span></th>
+                            <th scope="col" class="text-start">增减原因</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var group in grouped)
+                        {
+                            var rows = group.ToList();
+                            decimal sumBudget2026 = 0m, sumActual2026 = 0m, sumBudget2027 = 0m, sumChange = 0m;
+
+                            for (var r = 0; r < rows.Count; r++)
+                            {
+                                var line = rows[r].Line;
+                                var index = rows[r].Index;
+                                sumBudget2026 += line.Budget2026;
+                                sumActual2026 += line.Actual2026;
+                                sumBudget2027 += line.Budget2027;
+                                sumChange += line.ChangeAmount;
+
+                                var zeroBudget = line.Budget2026 == 0m ? " num-zero" : string.Empty;
+                                var zeroActual = line.Actual2026 == 0m ? " num-zero" : string.Empty;
+
+                                <tr data-row data-cat="@group.Key" data-actual="@line.Actual2026.ToString(CultureInfo.InvariantCulture)">
+                                    @if (r == 0)
+                                    {
+                                        <th scope="rowgroup" rowspan="@(rows.Count + 1)" class="cat-cell">@group.Key</th>
+                                    }
+                                    <td class="c-no">@(r + 1)</td>
+                                    <td class="subject-cell">
+                                        <input type="hidden" name="Lines[@index].ReportLineId" value="@line.ReportLineId" />
+                                        <input type="hidden" name="Lines[@index].SubjectId" value="@line.SubjectId" />
+                                        @line.SubjectName<span class="chip-flag">需说明</span>
+                                    </td>
+                                    <td class="num num-ro money-start@zeroBudget">@Money(line.Budget2026)</td>
+                                    <td class="num num-ro@zeroActual">
+                                        @if (line.Actual2026 != 0m)
+                                        {
+                                            <a class="drill" title="查看该科目的凭证级决算明细"
+                                               aria-label="@(line.SubjectName + " " + Model.BaselineYear + " 年决算明细，共 " + Money(line.Actual2026) + " 元")"
+                                               asp-controller="ActualDetail" asp-action="Index"
+                                               asp-route-batchId="@Model.BatchId"
+                                               asp-route-orgId="@Model.OrganizationId"
+                                               asp-route-subjectId="@line.SubjectId"
+                                               asp-route-expenseType="@line.ExpenseType">@Money(line.Actual2026)</a>
+                                        }
+                                        else
+                                        {
+                                            @Money(line.Actual2026)
+                                        }
+                                    </td>
+                                    <td class="num">
+                                        @if (Model.ReadOnly)
+                                        {
+                                            <strong>@Money(line.Budget2027)</strong>
+                                        }
+                                        else
+                                        {
+                                            <input type="text" inputmode="decimal" spellcheck="false"
+                                                   class="sheet-input js-money" data-col="b2027"
+                                                   name="Lines[@index].Budget2027"
+                                                   value="@line.Budget2027.ToString("F2", CultureInfo.InvariantCulture)"
+                                                   aria-label="@(line.SubjectName + " " + Model.PlanYear + " 年预算数")" />
+                                            @Html.ValidationMessage($"Lines[{index}].Budget2027", "", new { @class = "text-danger small" })
+                                        }
+                                    </td>
+                                    <td class="@ChgClass(line.ChangeAmount)" data-cell="change">@Money(line.ChangeAmount)</td>
+                                    <td class="num num-ro" data-cell="rate">@Pct(line.ChangeRate)</td>
+                                    <td>
+                                        @if (Model.ReadOnly)
+                                        {
+                                            <span>@line.Reason</span>
+                                        }
+                                        else
+                                        {
+                                            <input type="text" class="sheet-input js-reason" data-col="reason" maxlength="500"
+                                                   name="Lines[@index].Reason" value="@line.Reason"
+                                                   placeholder="偏差超阈值时必填"
+                                                   aria-label="@(line.SubjectName + " 增减原因")" />
+                                            @Html.ValidationMessage($"Lines[{index}].Reason", "", new { @class = "text-danger small" })
+                                        }
+                                    </td>
+                                </tr>
+                            }
+
+                            <tr class="subtotal" data-cat="@group.Key">
+                                <td colspan="2">@group.Key 小计</td>
+                                <td class="num">@Money(sumBudget2026)</td>
+                                <td class="num">@Money(sumActual2026)</td>
+                                <td class="num" data-sum="b2027">@Money(sumBudget2027)</td>
+                                <td class="@ChgClass(sumChange)" data-sum="change">@Money(sumChange)</td>
+                                <td class="num" data-sum="rate">@Pct(sumActual2026 == 0m ? null : sumChange / sumActual2026)</td>
+                                <td></td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3">@expenseType 合计</td>
+                            <td class="num">@Money(isBasic ? Model.BasicBudget2026 : Model.ProjectBudget2026)</td>
+                            <td class="num">@Money(isBasic ? Model.BasicActual2026 : Model.ProjectActual2026)</td>
+                            <td class="num" data-foot="b2027">@Money(blockTotal)</td>
+                            <td class="@ChgClass(isBasic ? Model.BasicChange : Model.ProjectChange)" data-foot="change">@Money(isBasic ? Model.BasicChange : Model.ProjectChange)</td>
+                            <td class="num" data-foot="rate">@Pct(isBasic ? Model.BasicChangeRate : Model.ProjectChangeRate)</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            }
+        </div>
+
+        <div class="sheet-total-head">部门总计（基本支出 + 项目支出）</div>
+        <table class="sheet-total" aria-label="部门总计">
+            <tbody>
+                <tr>
+                    <th scope="row">@(Model.BaselineYear) 年预算数</th>
+                    <td>@Money(Model.TotalBudget2026)</td>
+                </tr>
+                <tr>
+                    <th scope="row">@(Model.BaselineYear) 年决算数</th>
+                    <td>@Money(Model.TotalActual2026)</td>
+                </tr>
+                <tr>
+                    <th scope="row">@Model.PlanYear 年预算数</th>
+                    <td data-grand="b2027">@Money(Model.TotalBudget2027)</td>
+                </tr>
+                <tr>
+                    <th scope="row">较上年决算增减</th>
+                    <td class="@(Model.TotalChange > 0m ? "num-up" : (Model.TotalChange < 0m ? "num-down" : ""))" data-grand="change">@Money(Model.TotalChange)</td>
+                </tr>
+                <tr>
+                    <th scope="row">较上年决算增幅</th>
+                    <td data-grand="rate">@Pct(Model.TotalChangeRate)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="sheet-actions">
+            @if (!Model.ReadOnly)
+            {
+                <button type="submit" class="btn btn-primary" id="btnSave">保存草稿</button>
+                <button type="submit" form="formSubmit" class="btn btn-success" id="btnSubmit">提交审核</button>
+                <span class="sheet-dirty">有未保存的修改</span>
+                <span class="sheet-missing" data-count="0"></span>
+            }
+            <a class="btn btn-outline-secondary" asp-action="Index">返回列表</a>
+            @if (!Model.ReadOnly)
+            {
+                <span class="sheet-hint">Ctrl + S 保存 · Enter 跳到下一行</span>
+            }
+        </div>
+    </form>
+
+    @if (!Model.ReadOnly)
+    {
+        <form id="formSubmit" asp-action="Submit" asp-route-id="@Model.FilingFormId" method="post" class="d-none"></form>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var page = document.querySelector('.sheet-page[data-sheet]');
+            if (!page || !page.querySelector('.js-money')) return;
+
+            var threshold = parseFloat(page.getAttribute('data-threshold') || '0') || 0;
+            var saveBtn = document.getElementById('btnSave');
+            var submitBtn = document.getElementById('btnSubmit');
+            var missingLabel = page.querySelector('.sheet-missing');
+            var dirty = false;
+
+            function toNumber(raw) {
+                var s = String(raw === null || raw === undefined ? '' : raw).replace(/[\s,，]/g, '');
+                if (s === '') return 0;
+                var n = Number(s);
+                return isNaN(n) ? null : n;
+            }
+
+            function money(n) {
+                return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            function pct(r) {
+                return (r * 100).toFixed(2) + '%';
+            }
+
+            function writeCell(cell, value, colored) {
+                if (!cell) return;
+                cell.textContent = money(value);
+                if (colored) {
+                    cell.classList.toggle('num-up', value > 0);
+                    cell.classList.toggle('num-down', value < 0);
+                }
+            }
+
+            function recalcAll() {
+                var grand = { budget: 0, change: 0, actual: 0 };
+                var missingCount = 0;
+
+                Array.prototype.forEach.call(page.querySelectorAll('table.sheet-table'), function (table) {
+                    var groups = {};
+                    var foot = { budget: 0, change: 0, actual: 0 };
+
+                    Array.prototype.forEach.call(table.querySelectorAll('tr[data-row]'), function (tr) {
+                        var input = tr.querySelector('.js-money');
+                        var actual = Number(tr.getAttribute('data-actual')) || 0;
+                        var value = toNumber(input.value);
+                        var invalid = value === null;
+                        var budget = invalid ? 0 : value;
+                        var change = budget - actual;
+                        var rate = actual === 0 ? null : change / actual;
+
+                        input.classList.toggle('is-invalid-soft', invalid);
+
+                        var changeCell = tr.querySelector('[data-cell="change"]');
+                        changeCell.textContent = money(change);
+                        changeCell.classList.toggle('num-up', change > 0);
+                        changeCell.classList.toggle('num-down', change < 0);
+
+                        tr.querySelector('[data-cell="rate"]').textContent = rate === null ? '' : pct(rate);
+
+                        var needs = budget === 0 ? false : (actual === 0 ? true : Math.abs(change / actual) > threshold);
+
+                        var reason = tr.querySelector('.js-reason');
+                        var missing = false;
+                        if (reason) {
+                            missing = needs && reason.value.trim() === '';
+                            reason.classList.toggle('is-missing', missing);
+                        }
+                        // 标记只在「该说明且还没写」时出现，写完就消失
+                        tr.classList.toggle('needs-reason', missing);
+                        if (missing) missingCount++;
+
+                        var cat = tr.getAttribute('data-cat') || '';
+                        if (!groups[cat]) groups[cat] = { budget: 0, change: 0, actual: 0 };
+                        groups[cat].budget += budget;
+                        groups[cat].change += change;
+                        groups[cat].actual += actual;
+
+                        foot.budget += budget;
+                        foot.change += change;
+                        foot.actual += actual;
+                    });
+
+                    Array.prototype.forEach.call(table.querySelectorAll('tr.subtotal'), function (tr) {
+                        var g = groups[tr.getAttribute('data-cat')];
+                        if (!g) return;
+                        writeCell(tr.querySelector('[data-sum="b2027"]'), g.budget, false);
+                        writeCell(tr.querySelector('[data-sum="change"]'), g.change, true);
+                        var rateCell = tr.querySelector('[data-sum="rate"]');
+                        if (rateCell) rateCell.textContent = g.actual === 0 ? '' : pct(g.change / g.actual);
+                    });
+
+                    var blockEl = page.querySelector('[data-block-total="' + table.getAttribute('data-expense') + '"]');
+                    if (blockEl) blockEl.textContent = money(foot.budget);
+
+                    writeCell(table.querySelector('[data-foot="b2027"]'), foot.budget, false);
+                    writeCell(table.querySelector('[data-foot="change"]'), foot.change, true);
+                    var footRate = table.querySelector('[data-foot="rate"]');
+                    if (footRate) footRate.textContent = foot.actual === 0 ? '' : pct(foot.change / foot.actual);
+
+                    grand.budget += foot.budget;
+                    grand.change += foot.change;
+                    grand.actual += foot.actual;
+                });
+
+                writeCell(page.querySelector('[data-grand="b2027"]'), grand.budget, false);
+                writeCell(page.querySelector('[data-grand="change"]'), grand.change, true);
+                var grandRate = page.querySelector('[data-grand="rate"]');
+                if (grandRate) grandRate.textContent = grand.actual === 0 ? '' : pct(grand.change / grand.actual);
+
+                if (missingLabel) {
+                    missingLabel.setAttribute('data-count', String(missingCount));
+                    missingLabel.textContent = missingCount + ' 项需填写增减原因';
+                }
+            }
+
+            function markDirty() {
+                if (dirty) return;
+                dirty = true;
+                page.classList.add('is-dirty');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.title = '有未保存的修改，请先保存草稿再提交';
+                }
+            }
+
+            function guard(e) {
+                if (!dirty) return;
+                e.preventDefault();
+                e.returnValue = '';
+            }
+
+            Array.prototype.forEach.call(page.querySelectorAll('.js-money, .js-reason'), function (input) {
+                var isMoney = input.classList.contains('js-money');
+
+                input.addEventListener('focus', function () {
+                    if (!isMoney) return;
+                    input.value = input.value.replace(/[\s,，]/g, '');
+                    input.select();
+                });
+
+                input.addEventListener('input', function () {
+                    markDirty();
+                    recalcAll();
+                });
+
+                input.addEventListener('blur', function () {
+                    if (!isMoney) return;
+                    var n = toNumber(input.value);
+                    // 空值视为 0；无法解析的内容原样保留，交给服务端提示，不吞掉用户输入
+                    if (n !== null) input.value = money(n);
+                });
+
+                input.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    var tr = input.closest('tr');
+                    var selector = '[data-col="' + input.getAttribute('data-col') + '"]';
+                    var dir = e.shiftKey ? -1 : 1;
+                    var probe = tr;
+                    while (probe) {
+                        probe = dir > 0 ? probe.nextElementSibling : probe.previousElementSibling;
+                        if (!probe) break;
+                        if (probe.hasAttribute('data-row')) {
+                            var target = probe.querySelector(selector);
+                            if (target) {
+                                target.focus();
+                                return;
+                            }
+                        }
+                    }
+                });
+            });
+
+            var form = document.getElementById('formEdit');
+            if (form) {
+                form.addEventListener('submit', function () {
+                    Array.prototype.forEach.call(page.querySelectorAll('.js-money'), function (input) {
+                        var n = toNumber(input.value);
+                        if (n !== null) input.value = n.toFixed(2);
+                    });
+                    dirty = false;
+                    window.removeEventListener('beforeunload', guard);
+                });
+            }
+
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function (e) {
+                    if (!window.confirm('提交后数据将锁定，不能再修改。确认提交？')) {
+                        e.preventDefault();
+                    }
+                });
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                    e.preventDefault();
+                    if (saveBtn) saveBtn.click();
+                }
+            });
+
+            window.addEventListener('beforeunload', guard);
+
+            // 首次渲染就按千分位显示，聚焦时再还原为纯数字
+            Array.prototype.forEach.call(page.querySelectorAll('.js-money'), function (input) {
+                var n = toNumber(input.value);
+                if (n !== null) input.value = money(n);
+            });
+            recalcAll();
+        })();
+    </script>
+}

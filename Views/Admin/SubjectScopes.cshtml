@@ -1,0 +1,100 @@
+@model SubjectDepartmentScopePageViewModel
+@{
+    ViewData["Title"] = "科目部门范围";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">科目部门范围</h2>
+    <a class="btn btn-outline-secondary" asp-action="Index">返回管理员首页</a>
+</div>
+@if (!string.IsNullOrWhiteSpace(Model.Message))
+{
+    <div class="alert alert-info">@Model.Message</div>
+}
+<div class="alert alert-light border">
+    勾选表示该科目适用的部门。数据库中没有任何范围记录时按全部部门适用；保存时若某科目未勾选部门，将按全部部门处理。
+    保存范围后会检查所选批次存量明细：可安全清理的零金额草稿/打回行会删除；非零或已锁定明细保留并列在下方。
+</div>
+<form asp-action="SubjectScopes" method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-5">
+        <label class="form-label" for="batchId">检查存量明细的批次</label>
+        <select id="batchId" name="batchId" class="form-select">
+            @foreach (var batch in Model.Batches)
+            {
+                <option value="@batch.Id" selected="@(Model.SelectedBatchId == batch.Id)">@batch.Name（@batch.PlanYear）</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3"><button type="submit" class="btn btn-outline-primary">选择批次</button></div>
+</form>
+
+<form asp-action="SaveSubjectScopes" method="post">
+    <input type="hidden" name="SelectedBatchId" value="@Model.SelectedBatchId" />
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>费用类别</th>
+                    <th>科目</th>
+                    @foreach (var organization in Model.Organizations)
+                    {
+                        <th class="text-center" style="min-width:100px">@organization.Name</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+            @for (var i = 0; i < Model.Rows.Count; i++)
+            {
+                <tr>
+                    <input type="hidden" name="Rows[@i].SubjectId" value="@Model.Rows[i].SubjectId" />
+                    <td class="small">@Model.Rows[i].Category</td>
+                    <td>@Model.Rows[i].SubjectName</td>
+                    @foreach (var organization in Model.Organizations)
+                    {
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input"
+                                   name="Rows[@i].OrganizationIds" value="@organization.Id"
+                                   checked="@(Model.Rows[i].OrganizationIds.Contains(organization.Id))"
+                                   aria-label="@Model.Rows[i].SubjectName 适用于 @organization.Name" />
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <button type="submit" class="btn btn-primary">保存范围并处理存量明细</button>
+</form>
+
+<h4 class="mt-4">需人工处理的不适用存量明细</h4>
+@if (Model.ManualIssues.Count == 0)
+{
+    <div class="alert alert-success">当前批次没有待人工处理的不适用明细。</div>
+}
+else
+{
+    <div class="alert alert-warning">以下明细未删除，请人工处理；已提交或审核通过的单据不会被自动修改。</div>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle">
+            <thead class="table-light">
+                <tr><th>批次</th><th>单据</th><th>部门</th><th>科目</th><th>费用属性</th><th>状态</th><th>2026预算</th><th>2026决算</th><th>2027预算</th><th>原因/处理提示</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var issue in Model.ManualIssues)
+            {
+                <tr>
+                    <td>@issue.BatchName</td>
+                    <td>@issue.FormNumber</td>
+                    <td>@issue.OrganizationName</td>
+                    <td>@issue.SubjectName</td>
+                    <td>@issue.ExpenseType</td>
+                    <td>@issue.Status</td>
+                    <td class="text-end">@issue.Budget2026.ToString("N2")</td>
+                    <td class="text-end">@issue.Actual2026.ToString("N2")</td>
+                    <td class="text-end">@issue.Budget2027.ToString("N2")</td>
+                    <td>@issue.Explanation @issue.Reason</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

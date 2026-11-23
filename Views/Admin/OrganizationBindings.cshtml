@@ -1,0 +1,49 @@
+@model IReadOnlyList<Microsoft.AspNetCore.Identity.IdentityUser>
+@{
+    ViewData["Title"] = "账号与部门绑定";
+    var organizations = ViewBag.Organizations as List<Organization> ?? new List<Organization>();
+    var bindings = ViewBag.Bindings as Dictionary<string, int?> ?? new Dictionary<string, int?>();
+    var rolesByUser = ViewBag.RolesByUser as Dictionary<string, string> ?? new Dictionary<string, string>();
+}
+<h2 class="mb-3">账号与部门绑定</h2>
+<p class="text-muted">每个账号最多绑定一个部门；选择“未绑定”将移除该账号的部门绑定。</p>
+@if (TempData["Message"] is string message)
+{
+    <div class="alert alert-success">@message</div>
+}
+<div class="table-responsive">
+    <table class="table table-bordered table-striped align-middle">
+        <thead class="table-light">
+            <tr><th>登录账号（邮箱）</th><th>当前角色</th><th>当前绑定部门</th><th>修改绑定</th><th></th></tr>
+        </thead>
+        <tbody>
+        @foreach (var account in Model)
+        {
+            var currentOrganizationId = bindings.TryGetValue(account.Id, out var boundOrganizationId)
+                ? boundOrganizationId
+                : null;
+            var currentOrganization = organizations.FirstOrDefault(x => x.Id == currentOrganizationId);
+            <tr>
+                <td>@(account.Email ?? account.UserName ?? account.Id)</td>
+                <td>@rolesByUser.GetValueOrDefault(account.Id, "未分配角色")</td>
+                <td>@(currentOrganization?.Name ?? "未绑定")</td>
+                <td>
+                    <form asp-action="SaveOrganizationBinding" method="post" class="d-flex gap-2">
+                        <input type="hidden" name="userId" value="@account.Id" />
+                        <select name="organizationId" class="form-select form-select-sm" aria-label="选择绑定部门">
+                            <option value="" selected="@(currentOrganizationId is null ? "selected" : null)">未绑定</option>
+                            @foreach (var organization in organizations)
+                            {
+                                <option value="@organization.Id" selected="@(currentOrganizationId == organization.Id ? "selected" : null)">@organization.Name</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-primary text-nowrap">保存</button>
+                    </form>
+                </td>
+                <td class="small text-muted">@(account.EmailConfirmed ? "邮箱已确认" : "邮箱未确认")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+<a class="btn btn-outline-secondary" asp-action="Index">返回管理员首页</a>

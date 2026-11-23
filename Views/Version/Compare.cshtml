@@ -1,0 +1,191 @@
+@model VersionCompareViewModel
+@{
+    ViewData["Title"] = "版本对比";
+    string F(decimal v) => v.ToString("N2");
+    string R(decimal? v) => v.HasValue ? v.Value.ToString("P2") : "—";
+    var fromVersion = Model.Options.FirstOrDefault(x => x.VersionNumber == Model.FromVersionNumber);
+    var toVersion = Model.Options.FirstOrDefault(x => x.VersionNumber == Model.ToVersionNumber);
+}
+
+<div class="d-flex justify-content-between align-items-end mb-3">
+    <div>
+        <h2 class="mb-1">单据版本对比</h2>
+        <div class="text-muted small">
+            @Model.BatchName · @Model.OrganizationName · @Model.FormNumber · 当前状态：@Model.Status
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        @if (User.IsInRole(AppRoles.Filler) && !User.IsInRole(AppRoles.Admin) && !User.IsInRole(AppRoles.Reviewer))
+        {
+            <a class="btn btn-outline-secondary" asp-controller="Filing" asp-action="Edit" asp-route-id="@Model.FilingFormId">返回单据</a>
+        }
+        else
+        {
+            <a class="btn btn-outline-secondary" asp-controller="Review" asp-action="Details" asp-route-id="@Model.FilingFormId">返回单据</a>
+        }
+    </div>
+</div>
+
+@if (Model.OnlyOneVersion)
+{
+    <div class="alert alert-info">
+        该单据只有一个版本，暂无可对比内容
+    </div>
+    return;
+}
+
+<form method="get" class="card mb-3">
+    <div class="card-body d-flex flex-wrap gap-3 align-items-end">
+        <input type="hidden" name="formId" value="@Model.FilingFormId" />
+        <div>
+            <label class="form-label small text-muted mb-1">对比基准版本</label>
+            <select name="from" class="form-select form-select-sm" style="width:300px" onchange="this.form.submit()">
+                @foreach (var option in Model.Options)
+                {
+                <option value="@option.VersionNumber" selected="@(option.VersionNumber == Model.FromVersionNumber)">@option.Display</option>
+                }
+            </select>
+        </div>
+        <div class="pt-3 text-muted">→</div>
+        <div>
+            <label class="form-label small text-muted mb-1">对比目标版本</label>
+            <select name="to" class="form-select form-select-sm" style="width:300px" onchange="this.form.submit()">
+                @foreach (var option in Model.Options)
+                {
+                <option value="@option.VersionNumber" selected="@(option.VersionNumber == Model.ToVersionNumber)">@option.Display</option>
+                }
+            </select>
+        </div>
+        <div class="form-check ms-2 mb-2">
+            <input class="form-check-input" type="checkbox" name="showAll" value="1" id="showAll"
+                   checked="@Model.ShowAll" onchange="this.form.submit()" />
+            <label class="form-check-label small" for="showAll">显示未变动科目</label>
+        </div>
+        <div class="ms-auto">
+            <button type="submit" class="btn btn-primary btn-sm">重新对比</button>
+        </div>
+    </div>
+</form>
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">变动科目数</div>
+            <div class="fs-5 fw-bold">@Model.ChangedCount 项</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">合计增加额</div>
+            <div class="fs-5 fw-bold text-danger">@Model.TotalIncrease.ToString("N2")</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">合计减少额</div>
+            <div class="fs-5 fw-bold text-success">@Model.TotalDecrease.ToString("N2")</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">净变动额</div>
+            <div class="fs-5 fw-bold @(Model.NetChange > 0 ? "text-danger" : Model.NetChange < 0 ? "text-success" : "")">
+                @Model.NetChange.ToString("N2")
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<div class="table-responsive" style="max-height:70vh; overflow:auto">
+    <table class="table table-sm table-bordered table-hover align-middle">
+        <thead class="table-light" style="position:sticky; top:0; z-index:2">
+            <tr>
+                <th style="width:52px">序号</th>
+                <th>费用类别</th>
+                <th>科目名称</th>
+                <th style="width:90px">费用属性</th>
+                <th class="text-end" style="width:140px">
+                    2027预算<br /><span class="fw-normal small">V@(fromVersion?.VersionNumber)</span>
+                </th>
+                <th class="text-end" style="width:140px">
+                    2027预算<br /><span class="fw-normal small">V@(toVersion?.VersionNumber)</span>
+                </th>
+                <th class="text-end" style="width:130px">差异额</th>
+                <th class="text-end" style="width:90px">变动率</th>
+                <th>说明变化</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="9" class="text-center text-muted py-3">两个版本之间没有差异。</td></tr>
+        }
+        else
+        {
+            var index = 0;
+            foreach (var row in Model.Rows)
+            {
+                index++;
+                <tr>
+                    <td class="text-center text-muted">@index</td>
+                    <td class="text-muted small">@row.Category</td>
+                    <td>
+                        @row.SubjectName
+                        @if (row.IsNew)
+                        {
+                            <span class="badge bg-primary ms-1">新增</span>
+                        }
+                        else if (row.IsRemoved)
+                        {
+                            <span class="badge bg-secondary ms-1">清零</span>
+                        }
+                    </td>
+                    <td class="small">@row.ExpenseType</td>
+                    <td class="text-end">@F(row.FromBudget)</td>
+                    <td class="text-end">@F(row.ToBudget)</td>
+                    <td class="text-end fw-semibold @(row.Delta > 0 ? "text-danger" : row.Delta < 0 ? "text-success" : "text-muted")">
+                        @row.Delta.ToString("N2")
+                    </td>
+                    <td class="text-end">@R(row.Rate)</td>
+                    <td class="small">
+                        @if (row.HasReasonChange)
+                        {
+                            <span class="text-muted">原：</span>@(string.IsNullOrWhiteSpace(row.FromReason) ? "（空）" : row.FromReason)
+                            <span class="text-muted">→ 现：</span>@(string.IsNullOrWhiteSpace(row.ToReason) ? "（空）" : row.ToReason)
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="row g-2 mt-2">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header py-2 fw-bold">基准版本 V@(fromVersion?.VersionNumber)</div>
+            <div class="card-body py-2 small">
+                <div>动作：@fromVersion?.Action</div>
+                <div>操作人：@(fromVersion?.Operator ?? "—")</div>
+                <div>时间：@fromVersion?.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                <div>意见：@(string.IsNullOrWhiteSpace(fromVersion?.Comments) ? "—" : fromVersion!.Comments)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header py-2 fw-bold">目标版本 V@(toVersion?.VersionNumber)</div>
+            <div class="card-body py-2 small">
+                <div>动作：@toVersion?.Action</div>
+                <div>操作人：@(toVersion?.Operator ?? "—")</div>
+                <div>时间：@toVersion?.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                <div>意见：@(string.IsNullOrWhiteSpace(toVersion?.Comments) ? "—" : toVersion!.Comments)</div>
+            </div>
+        </div>
+    </div>
+</div>

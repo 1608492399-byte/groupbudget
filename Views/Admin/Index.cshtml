@@ -1,0 +1,109 @@
+@model IEnumerable<BatchListItem>
+@{
+    ViewData["Title"] = "批次与基准数据";
+}
+<h2 class="mb-3">批次与基准数据</h2>
+<div class="mb-3">
+    <a class="btn btn-outline-primary" asp-controller="Analytics" asp-action="Index">执行分析</a>
+    <a class="btn btn-outline-primary" asp-action="OrganizationBindings">账号与部门绑定</a>
+    <a class="btn btn-outline-secondary" asp-action="Accounts">演示账号</a>
+    <a class="btn btn-outline-success" asp-controller="ActualImport" asp-action="Index">决算导入</a>
+    <a class="btn btn-outline-dark" asp-action="SubjectScopes">科目部门范围</a>
+    <form asp-action="RepairHistoricalLines" method="post" class="d-inline"
+          onsubmit="return confirm('仅修正草稿和已打回单据；已提交、审核通过单据不会修改。确认继续？');">
+        <button type="submit" class="btn btn-warning">修正历史明细</button>
+    </form>
+</div>
+@if (TempData["Message"] is string message)
+{
+    <div class="alert alert-info">@message</div>
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="card text-center"><div class="card-body"><h3>@Model.Count()</h3><div class="text-muted">批次</div></div></div></div>
+    <div class="col-md-4"><div class="card text-center"><div class="card-body"><h3>@ViewBag.SubjectCount</h3><div class="text-muted">预算科目</div></div></div></div>
+    <div class="col-md-4"><div class="card text-center"><div class="card-body"><h3>@ViewBag.TotalForms</h3><div class="text-muted">填报单</div></div></div></div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header fw-bold">新建批次（一年只报一次）</div>
+    <div class="card-body">
+        <form asp-action="CreateBatch" method="post" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label">批次名称</label>
+                <input name="name" class="form-control" value="2028 年度预算编制（基准年 2027）" required />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">编制年度</label>
+                <input name="planYear" type="number" class="form-control" value="2028" min="2000" max="2100" required />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">偏差阈值</label>
+                <input name="deviationThreshold" type="number" step="0.01" min="0" max="1" class="form-control" value="0.20" required />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">创建批次</button>
+            </div>
+            <div class="col-12"><div class="form-text">阈值 0.20 表示 20%。基准年自动取编制年度 − 1。</div></div>
+        </form>
+    </div>
+</div>
+
+<h4 class="mb-2">批次列表</h4>
+<table class="table table-bordered align-middle">
+    <thead class="table-light">
+        <tr>
+            <th>批次</th>
+            <th>年度</th>
+            <th>状态</th>
+            <th>基准版本</th>
+            <th>阈值</th>
+            <th>单据 / 待审</th>
+            <th>下发时间</th>
+            <th style="width:330px">操作</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var b in Model)
+    {
+        <tr>
+            <td>@b.Name</td>
+            <td>@b.PlanYear <span class="text-muted">/ 基准 @b.BaselineYear</span></td>
+            <td><span class="badge @(b.Status == BatchStatus.Published ? "bg-primary" : b.Status == BatchStatus.Draft ? "bg-secondary" : "bg-dark")">@b.Status</span></td>
+            <td>V@(b.CurrentBaselineVersion)</td>
+            <td>@b.DeviationThreshold.ToString("P0")</td>
+            <td>@b.FormCount / @b.SubmittedCount</td>
+            <td>@(b.PublishedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+            <td>
+                <a class="btn btn-sm btn-outline-primary" asp-action="Baseline" asp-route-batchId="@b.Id">录入 / 查看基准</a>
+                @if (b.Status != BatchStatus.Archived)
+                {
+                    <form asp-action="Publish" method="post" class="d-inline">
+                        <input type="hidden" name="batchId" value="@b.Id" />
+                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('下发后将冻结基准数据快照并开放填报，确认？');">下发</button>
+                    </form>
+                }
+                @if (b.Status == BatchStatus.Published)
+                {
+                    <form asp-action="ChangeStatus" method="post" class="d-inline">
+                        <input type="hidden" name="batchId" value="@b.Id" />
+                        <input type="hidden" name="status" value="@BatchStatus.Closed" />
+                        <button type="submit" class="btn btn-sm btn-outline-dark">截止</button>
+                    </form>
+                }
+                @if (b.Status == BatchStatus.Closed)
+                {
+                    <form asp-action="ChangeStatus" method="post" class="d-inline">
+                        <input type="hidden" name="batchId" value="@b.Id" />
+                        <input type="hidden" name="status" value="@BatchStatus.Archived" />
+                        <button type="submit" class="btn btn-sm btn-outline-dark">归档</button>
+                    </form>
+                }
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+<div class="alert alert-light border small">
+    <strong>下发规则：</strong>下发时冻结当前版本基准做快照并锁定；下发后管理员再改基准会生成新版本并留痕，需重新下发才生效，<strong>已提交单据不受影响</strong>。未下发时部门看不到任何数据。
+</div>

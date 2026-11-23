@@ -1,0 +1,86 @@
+@model ExportIndexViewModel
+@{
+    ViewData["Title"] = "导出汇总";
+}
+
+<div class="d-flex justify-content-between align-items-end mb-3">
+    <div>
+        <h2 class="mb-1">导出汇总</h2>
+        <div class="text-muted small">CSV 格式，UTF-8 带 BOM，Excel 直接打开不乱码；单位：元</div>
+    </div>
+    <form method="get" class="d-flex gap-2 align-items-center">
+        <label class="small text-muted">批次</label>
+        <select name="batchId" class="form-select form-select-sm" onchange="this.form.submit()" style="width:280px">
+            @foreach (var b in Model.Batches)
+            {
+                <option value="@b.Id" selected="@(b.Id == Model.BatchId)">@b.Name（@b.Status）</option>
+            }
+        </select>
+    </form>
+</div>
+
+@if (Model.BatchId == 0)
+{
+    <div class="alert alert-warning">还没有批次，无法导出。</div>
+    return;
+}
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">填报明细行</div>
+            <div class="fs-5 fw-bold">@Model.LineCount 行</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">2026 预算合计</div>
+            <div class="fs-5 fw-bold">@Model.Budget2026Total.ToString("N2")</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">2026 决算合计</div>
+            <div class="fs-5 fw-bold">@Model.Actual2026Total.ToString("N2")</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100"><div class="card-body py-2">
+            <div class="small text-muted">2027 预算合计</div>
+            <div class="fs-5 fw-bold">@Model.Budget2027Total.ToString("N2")</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold">预决算汇总（基本 / 项目分列）</div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    每个部门内先列基本支出、再列项目支出，各自小计，末尾给出部门合计；
+                    全部部门之后输出集团基本支出合计、集团项目支出合计、集团总计。
+                </p>
+                <p class="small text-muted mb-3">
+                    列：部门、费用类别、科目、2026预算数、2026决算数、2027预算数、增减额、增幅、增减原因、单据状态。
+                </p>
+                <a class="btn btn-primary" asp-action="All" asp-route-batchId="@Model.BatchId">下载预决算汇总</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold">表2 部门项目支出预算表</div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    交叉表：行是全部项目支出科目（@Model.ProjectSubjectCount 个），列是 @Model.DepartmentCount 个部门，
+                    单元格为该部门该科目的 2027 预算数，最右为科目合计、最下为部门合计。
+                </p>
+                <p class="small text-muted mb-3">
+                    金额为 0 的单元格留空，便于直接打印上报。
+                </p>
+                <a class="btn btn-primary" asp-action="ProjectTable" asp-route-batchId="@Model.BatchId">下载项目支出预算表</a>
+            </div>
+        </div>
+    </div>
+</div>

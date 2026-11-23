@@ -1,0 +1,68 @@
+@model ExportIndexViewModel
+@{
+    ViewData["Title"] = "预算报表导出";
+}
+<div class="d-flex justify-content-between align-items-end mb-3">
+    <div>
+        <h2 class="mb-1">预算报表导出</h2>
+        <div class="text-muted small">批次：@Model.BatchName · 单位：元 · CSV 使用 UTF-8 BOM 编码</div>
+    </div>
+    <form method="get" asp-action="Index" class="d-flex gap-2 align-items-center">
+        <label for="batchId" class="small text-muted">批次</label>
+        <select id="batchId" name="batchId" class="form-select form-select-sm" onchange="this.form.submit()" style="width:280px">
+            @foreach (var batch in Model.Batches)
+            {
+                <option value="@batch.Id" selected="@(batch.Id == Model.BatchId)">@batch.Name（@batch.Status）</option>
+            }
+        </select>
+    </form>
+</div>
+
+@if (Model.BatchId == 0)
+{
+    <div class="alert alert-warning">暂无预算批次，无法导出。</div>
+}
+else
+{
+    <div class="row g-2 mb-3">
+        <div class="col-md-4">
+            <div class="card h-100"><div class="card-body py-2">
+                <div class="small text-muted">填报明细行</div>
+                <div class="fs-5 fw-bold">@Model.LineCount 行</div>
+            </div></div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100"><div class="card-body py-2">
+                <div class="small text-muted">预算批次</div>
+                <div class="fs-5 fw-bold">@Model.BatchName</div>
+            </div></div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100"><div class="card-body py-2">
+                <div class="small text-muted">部门数</div>
+                <div class="fs-5 fw-bold">@Model.DepartmentCount</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-bold">预决算汇总（基本支出 + 项目支出分列）</div>
+                <div class="card-body">
+                    <p class="small text-muted">每个部门分别输出基本支出、项目支出及各自小计，再输出部门合计；最后列出集团基本支出合计、项目支出合计和集团总计。</p>
+                    <a class="btn btn-primary" asp-action="All" asp-route-batchId="@Model.BatchId">导出预决算汇总（基本加项目分列）</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-bold">表2 部门项目支出预算表</div>
+                <div class="card-body">
+                    <p class="small text-muted">项目支出科目为行、全部部门为列，含科目合计、部门合计和集团总计；2027 预算为 0 的单元格留空。</p>
+                    <a class="btn btn-primary" asp-action="Project" asp-route-batchId="@Model.BatchId">导出表2 项目支出预算表</a>
+                </div>
+            </div>
+        </div>
+    </div>
+}

@@ -1,0 +1,54 @@
+@model IEnumerable<FilingForm>
+@{
+    ViewData["Title"] = "预算填报";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">预算填报 <small class="text-muted fs-6">@ViewBag.OrganizationName</small></h2>
+</div>
+
+@if (ViewBag.Warning != null)
+{
+    <div class="alert alert-warning">@ViewBag.Warning</div>
+}
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">当前没有已下发的填报任务。未下发的批次对部门不可见，请先由管理员下发。</div>
+}
+else
+{
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>单据编号</th>
+                <th>批次</th>
+                <th>编制年度</th>
+                <th>状态</th>
+                <th>版本</th>
+                <th>提交时间</th>
+                <th>审核意见</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.FormNumber</td>
+                <td>@item.BudgetBatch.Name</td>
+                <td>@item.BudgetBatch.PlanYear</td>
+                <td>
+                    @if (item.Status == FormStatus.Approved) { <span class="badge bg-success">@item.Status</span> }
+                    else if (item.Status == FormStatus.Submitted) { <span class="badge bg-primary">@item.Status</span> }
+                    else if (item.Status == FormStatus.Returned) { <span class="badge bg-danger">@item.Status</span> }
+                    else { <span class="badge bg-secondary">@item.Status</span> }
+                </td>
+                <td>V@(item.VersionNumber)</td>
+                <td>@(item.SubmittedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                <td class="small text-danger">@item.ReturnReason</td>
+                <td><a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@item.Id">@(item.Status == FormStatus.Draft || item.Status == FormStatus.Returned ? "填报 / 修改" : "查看")</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
