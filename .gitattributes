@@ -1,0 +1,5 @@
+# 统一换行：容器构建脚本必须是 LF，否则 Linux 下的 RUN 会带上 \r 而失败
+* text=auto
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+*.sh text eol=lf
