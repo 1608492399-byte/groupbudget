@@ -17,6 +17,33 @@ public class ExecutionAnalysisViewModel
 
     public decimal PlanTotal { get; set; }
 
+    /// <summary>2026 年基本支出预算（不含项目）。</summary>
+    public decimal BasicBudget { get; set; }
+
+    /// <summary>2026 年项目支出预算，单独列示，不与基本支出合并。</summary>
+    public decimal ProjectBudget { get; set; }
+
+    /// <summary>2026 年基本支出决算：取实际发生数明细中非「项目支出」的部分。</summary>
+    public decimal BasicActual { get; set; }
+
+    /// <summary>2026 年项目支出决算：取实际发生数明细中标记为「项目支出」的部分。</summary>
+    public decimal ProjectActual { get; set; }
+
+    public decimal BasicPlan { get; set; }
+
+    public decimal ProjectPlan { get; set; }
+
+    /// <summary>项目预算已下达但决算尚未按项目归集（决算明细全部标记为基本支出）。</summary>
+    public bool ProjectActualPending => ProjectBudget != 0m && ProjectActual == 0m;
+
+    public decimal? BasicExecRate => Ratio(BasicActual, BasicBudget);
+
+    public decimal? ProjectExecRate => ProjectActualPending ? null : Ratio(ProjectActual, ProjectBudget);
+
+    public decimal? BasicChangeRate => Ratio(BasicPlan - BasicActual, BasicActual);
+
+    public decimal? ProjectChangeRate => ProjectActualPending ? null : Ratio(ProjectPlan - ProjectActual, ProjectActual);
+
     /// <summary>是否已开始填报次年预算（全为 0 时增减比例无参考意义）。</summary>
     public bool HasPlan => PlanTotal != 0m;
 
@@ -38,6 +65,12 @@ public class ExecutionAnalysisViewModel
     public int NoBudgetDepartments => Departments.Count(d => d.ExecRate == null);
 
     public List<ExecutionRow> Departments { get; set; } = new();
+
+    /// <summary>
+    /// 本年预算为 0 的部门（执行率无分母、增减比例无意义），不进图表，
+    /// 只在「集团汇总表」明细里列示；其决算仍计入集团合计。
+    /// </summary>
+    public List<ExecutionRow> ChartExcludedDepartments { get; set; } = new();
 
     public List<ExecutionRow> Categories { get; set; } = new();
 

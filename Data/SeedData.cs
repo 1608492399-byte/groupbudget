@@ -1,6 +1,7 @@
 using GroupBudget.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace GroupBudget.Data;
 
@@ -20,9 +21,20 @@ public static class SeedData
         // Postgres 演示库直接按当前模型建表（迁移文件是 SQLite 专用类型，不能复用）；
         // 本地 SQLite 仍走迁移，保留历史演进的完整性。
         if (db.Database.IsNpgsql())
-            await db.Database.EnsureCreatedAsync();
+        {
+            // 注意：不能用 EnsureCreatedAsync()。Supabase 的 postgres 库里已有 auth / storage /
+            // extensions 等 schema 的表，EF 的「库是否为空」检查会把这些表算进去，误判为已建表，
+            // 于是跳过建表，随后访问 AspNetRoles 就报 42P01。改为直接按模型建表，并只检查 public 下有没有我们的表。
+            if (!await PostgresTablesExistAsync(db))
+            {
+                var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
+                await creator.CreateTablesAsync();
+            }
+        }
         else
+        {
             await db.Database.MigrateAsync();
+        }
 
         foreach (var role in new[] { AppRoles.Admin, AppRoles.Reviewer, AppRoles.Filler })
         {
@@ -444,6 +456,30 @@ public static class SeedData
                 OrganizationId = organizationId.Value
             });
             await db.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>
+    /// 只检查 public schema 下本项目自己的表是否已存在。
+    /// Postgres 上不能用「库里有没有表」来判断，宿主平台自带的系统表会造成误判。
+    /// </summary>
+    private static async Task<bool> PostgresTablesExistAsync(ApplicationDbContext db)
+    {
+        var conn = db.Database.GetDbConnection();
+        var opened = conn.State != System.Data.ConnectionState.Open;
+        if (opened) await conn.OpenAsync();
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "select exists (select 1 from information_schema.tables " +
+                "where table_schema = 'public' and table_name = 'AspNetRoles')";
+            var result = await cmd.ExecuteScalarAsync();
+            return result is true || (result is bool b && b);
+        }
+        finally
+        {
+            if (opened) await conn.CloseAsync();
         }
     }
 }

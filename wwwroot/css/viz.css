@@ -167,6 +167,21 @@
   color: var(--ink-4);
 }
 
+/* KPI 内的分项（基本／项目）各占一行，避免被当成一个合计数字读 */
+.kpi .note .line {
+  display: block;
+}
+
+.kpi .note .line + .line {
+  margin-top: 3px;
+}
+
+.kpi .note .line b {
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
 .kpi-ring {
   display: flex;
   align-items: center;
@@ -481,6 +496,30 @@
   font-weight: 600;
   color: var(--ink);
   background: #fcfcfd;
+}
+
+/* 「其中：基本支出／项目支出」分项行：弱化重量，与合计行区分 */
+.viz-table tfoot tr.scope-row td {
+  border-top: 0;
+  font-weight: 400;
+  color: var(--ink-3);
+  background: #fff;
+}
+
+.viz-table tfoot tr.scope-row:first-child td {
+  border-top: 1px solid var(--line);
+}
+
+.viz-table tfoot tr.scope-row td:first-child {
+  color: var(--ink-4);
+  padding-left: 14px;
+}
+
+/* 卡片正文里的说明文字（不只出现在卡片头部） */
+.viz-card .hint {
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-4);
 }
 
 .viz-table .cell-bar {

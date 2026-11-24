@@ -59,20 +59,30 @@ public class AnalyticsController : AppControllerBase
 
         var plans = await Db.ReportLines
             .Where(l => l.FilingForm!.BudgetBatchId == batch.Id)
-            .Select(l => new { l.SubjectId, l.Budget2027, l.FilingForm!.OrganizationId })
+            .Select(l => new { l.SubjectId, l.Budget2027, l.ExpenseType, l.FilingForm!.OrganizationId })
             .ToListAsync();
 
         // 集团口径的决算取「实际发生数」明细全量：基准表里人员费用已归口人事部，
         // 直接汇总基准会让集团合计少掉其他部门的人员费用（约 1,234 万），执行率严重偏低。
         var actualDetails = await Db.ActualDetails
             .Where(a => a.BudgetBatchId == batch.Id && a.SubjectId != null)
-            .Select(a => new { a.SubjectId, a.AccountAmount })
+            .Select(a => new { a.SubjectId, a.ExpenseType, a.AccountAmount })
             .ToListAsync();
+
+        const string ProjectType = "项目支出";
 
         vm.BudgetTotal = baselines.Sum(b => b.BudgetBaseline + b.BudgetBaselineProject);
         vm.ActualTotal = actualDetails.Sum(a => a.AccountAmount);
         vm.DeptActualTotal = baselines.Sum(b => b.ActualBaseline + b.ActualBaselineProject);
         vm.PlanTotal = plans.Sum(p => p.Budget2027);
+
+        // 基本支出／项目支出各自单列：项目预算不再混进基本口径里一起算执行率。
+        vm.BasicBudget = baselines.Sum(b => b.BudgetBaseline);
+        vm.ProjectBudget = baselines.Sum(b => b.BudgetBaselineProject);
+        vm.BasicActual = actualDetails.Where(a => a.ExpenseType != ProjectType).Sum(a => a.AccountAmount);
+        vm.ProjectActual = actualDetails.Where(a => a.ExpenseType == ProjectType).Sum(a => a.AccountAmount);
+        vm.BasicPlan = plans.Where(p => p.ExpenseType != ProjectType).Sum(p => p.Budget2027);
+        vm.ProjectPlan = plans.Where(p => p.ExpenseType == ProjectType).Sum(p => p.Budget2027);
 
         // —— 按部门 ——
         var deptRows = new List<ExecutionRow>();
@@ -86,15 +96,24 @@ public class AnalyticsController : AppControllerBase
 
             if (budget == 0m && actual == 0m && plan == 0m) continue;
 
-            deptRows.Add(new ExecutionRow
+            var row = new ExecutionRow
             {
                 Name = org.Name,
                 Budget = budget,
                 Actual = actual,
                 Plan = plan,
                 ExecRate = ExecutionAnalysisViewModel.Ratio(actual, budget)
-            });
+            };
+
+            // 本年预算为 0 的部门（如总裁办）执行率没有分母、增减比例恒为 −100%，
+            // 放进图表只会拉成一根空白条，因此只保留在明细表。
+            if (budget == 0m) vm.ChartExcludedDepartments.Add(row);
+            else deptRows.Add(row);
         }
+
+        vm.ChartExcludedDepartments = vm.ChartExcludedDepartments
+            .OrderByDescending(d => d.Actual)
+            .ToList();
 
         vm.Departments = deptRows.OrderByDescending(d => d.Budget).ThenByDescending(d => d.Actual).ToList();
 

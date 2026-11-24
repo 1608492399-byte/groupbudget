@@ -81,6 +81,7 @@ public class LoginModel : PageModel
         }
 
         ModelState.AddModelError(string.Empty, "邮箱或密码不正确，请重新输入。");
+        _logger.LogWarning("登录失败：{Email}，结果 {Result}", Input.Email, result.ToString());
         return Page();
     }
 }

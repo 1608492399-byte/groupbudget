@@ -80,14 +80,20 @@
             <div class="kpi">
                 <div class="k">@batch.BaselineYear 年预算合计</div>
                 <div class="v">@money(Model.BudgetTotal)<small>元</small></div>
-                <div class="note">基本 + 项目 · @Model.Departments.Count 个部门</div>
+                <div class="note">
+                    <span class="line">基本 <b>@money(Model.BasicBudget)</b></span>
+                    <span class="line">项目 <b>@money(Model.ProjectBudget)</b></span>
+                    <span class="line">@(Model.Departments.Count + Model.ChartExcludedDepartments.Count) 个部门</span>
+                </div>
             </div>
 
             <div class="kpi">
                 <div class="k">@batch.BaselineYear 年决算合计</div>
                 <div class="v">@money(Model.ActualTotal)<small>元</small></div>
                 <div class="note">
-                    <span class="tag @(Model.OverBudgetDepartments > 0 ? "tag-warn" : "tag-flat")">超预算 @Model.OverBudgetDepartments 个部门</span>
+                    <span class="line">基本 <b>@money(Model.BasicActual)</b></span>
+                    <span class="line">项目 <b>@(Model.ProjectActualPending ? "待归集" : money(Model.ProjectActual))</b></span>
+                    <span class="line"><span class="tag @(Model.OverBudgetDepartments > 0 ? "tag-warn" : "tag-flat")">超预算 @Model.OverBudgetDepartments 个部门</span></span>
                 </div>
             </div>
 
@@ -141,12 +147,16 @@
                 }
             </div>
 
-            @if (Model.NoBudgetDepartments > 0)
+            @if (Model.ChartExcludedDepartments.Count > 0)
             {
                 <div class="hint" style="margin-top:12px">
-                    有 @Model.NoBudgetDepartments 个部门本年预算为 0，执行率无法计算（显示「—」），其决算仍计入部门合计。
+                    @(string.Join("、", Model.ChartExcludedDepartments.Select(e => e.Name)))本年预算为 0，执行率没有分母，
+                    未计入图表，仅在「集团汇总表」明细中列示；该部门决算仍计入集团合计。
                 </div>
             }
+            <div class="hint" style="margin-top:8px">
+                部门条按「基本＋项目」总预算计算；基本支出与项目支出各自的执行情况见下方「费用类别对照」表的分行列。
+            </div>
             <div class="hint" style="margin-top:8px">
                 人员费用已归口人事部：人事部的预算与决算都包含全集团人员费用，其余部门只统计本部门非人员费用，各部门合计与集团实际发生额一致。
             </div>
@@ -251,6 +261,22 @@
                     }
                 </tbody>
                 <tfoot>
+                    <tr class="scope-row">
+                        <td>其中：基本支出</td>
+                        <td>@money(Model.BasicBudget)</td>
+                        <td>@money(Model.BasicActual)</td>
+                        <td>@pct(Model.BasicExecRate)</td>
+                        <td>@money(Model.BasicPlan)</td>
+                        <td class="@changeClass(Model.BasicChangeRate)">@pctSigned(Model.BasicChangeRate)</td>
+                    </tr>
+                    <tr class="scope-row">
+                        <td>其中：项目支出</td>
+                        <td>@money(Model.ProjectBudget)</td>
+                        <td>@(Model.ProjectActualPending ? "0.00 *" : money(Model.ProjectActual))</td>
+                        <td>@(Model.ProjectActualPending ? "—" : pct(Model.ProjectExecRate))</td>
+                        <td>@money(Model.ProjectPlan)</td>
+                        <td class="@changeClass(Model.ProjectChangeRate)">@(Model.ProjectActualPending ? "—" : pctSigned(Model.ProjectChangeRate))</td>
+                    </tr>
                     <tr>
                         <td>合计</td>
                         <td>@money(Model.BudgetTotal)</td>
@@ -262,6 +288,13 @@
                 </tfoot>
             </table>
             <div class="scroll-hint">表格较宽，可左右滑动查看完整列</div>
+            </div>
+            <div class="hint" style="margin-top:12px">
+                基本支出与项目支出分行列示，不合并计算：基本支出用「基本预算」作分母，项目支出用「项目预算」作分母。
+                @if (Model.ProjectActualPending)
+                {
+                    <text>当前决算明细尚未按项目归集（全部标记为「基本支出」），带 * 的 0.00 表示未归集而非未支出，因此项目执行率与增减比例留空；基本支出决算含这部分实际发生额，执行率会偏高。</text>
+                }
             </div>
         </section>
 
@@ -314,8 +347,9 @@
         </section>
 
         <div class="viz-foot">
-            <div><b>执行率</b> ＝ @batch.BaselineYear 年决算（基本＋项目）÷ @batch.BaselineYear 年预算（基本＋项目）；决算数据为 1–10 月实际发生数，<b>未按 12 个月年化</b>，因此整体执行率偏低属正常。</div>
-            <div><b>口径</b>：全部数据取「实际发生数」明细全量 @money(Model.ActualTotal) 元；人员费用按预算归属统一计入人事部，集团合计与各部门合计一致。</div>
+            <div><b>执行率</b> ＝ @batch.BaselineYear 年决算 ÷ @batch.BaselineYear 年预算；决算数据为 1–10 月实际发生数，<b>未按 12 个月年化</b>，因此整体执行率偏低属正常。</div>
+            <div><b>基本／项目单列</b>：基本支出预算 @money(Model.BasicBudget) 元、项目支出预算 @money(Model.ProjectBudget) 元，两者分别计算执行率，不再合并成一个分母。</div>
+            <div><b>口径</b>：全部数据取「实际发生数」明细全量 @money(Model.ActualTotal) 元；人员费用按预算归属统一计入人事部，集团合计与各部门合计一致。@if (Model.ChartExcludedDepartments.Count > 0) { <text>@(string.Join("、", Model.ChartExcludedDepartments.Select(e => e.Name)))本年预算为 0，不进图表（执行率无分母），只在汇总表明细列示。</text> }</div>
             <div><b>增减比例</b> ＝（@batch.PlanYear 年预算 − @batch.BaselineYear 年决算）÷ @batch.BaselineYear 年决算，比较基数与填报页「较上年决算增减」完全一致。</div>
             <div><b>颜色</b>：金额增加为红、减少为绿；执行率超过 100% 的条形转红表示超预算。</div>
             <div><b>提示</b>：@batch.PlanYear 年预算已清空，等待各部门重新填报；填报前增减比例不具参考意义。</div>

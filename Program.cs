@@ -104,6 +104,7 @@ app.MapGet("/health", () => Results.Json(new
 app.Run();
 
 // 把 postgres://user:pass@host/db?sslmode=require 转成 Npgsql 连接串
+// 注意：不能用 Uri 解析——密码里出现 # ? / 会被当成片段或路径截断，导致连错库或认证失败。
 static string BuildConnectionString(string raw)
 {
     if (!raw.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
@@ -112,21 +113,48 @@ static string BuildConnectionString(string raw)
         return raw;
     }
 
-    var uri = new Uri(raw);
-    var userInfo = uri.UserInfo.Split(':', 2);
+    var body = raw[(raw.IndexOf("://", StringComparison.Ordinal) + 3)..];
+    var slash = body.IndexOf('/');
+    var authority = slash < 0 ? body : body[..slash];
+    var rest = slash < 0 ? string.Empty : body[(slash + 1)..];
+
+    var username = "postgres";
+    var password = string.Empty;
+    var at = authority.LastIndexOf('@');
+    if (at >= 0)
+    {
+        var userInfo = authority[..at];
+        authority = authority[(at + 1)..];
+        var colon = userInfo.IndexOf(':');
+        username = colon < 0 ? userInfo : userInfo[..colon];
+        password = colon < 0 ? string.Empty : userInfo[(colon + 1)..];
+    }
+
+    var queryIndex = rest.IndexOf('?');
+    var database = (queryIndex < 0 ? rest : rest[..queryIndex]);
+    var query = queryIndex < 0 ? string.Empty : rest[(queryIndex + 1)..];
+
+    var port = 5432;
+    var hostPort = authority.LastIndexOf(':');
+    if (hostPort > 0 && int.TryParse(authority[(hostPort + 1)..], out var parsedPort))
+    {
+        port = parsedPort;
+        authority = authority[..hostPort];
+    }
+
     var cs = new NpgsqlConnectionStringBuilder
     {
-        Host = uri.Host,
-        Port = uri.IsDefaultPort ? 5432 : uri.Port,
-        Username = Uri.UnescapeDataString(userInfo[0]),
-        Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
-        Database = uri.AbsolutePath.TrimStart('/'),
+        Host = authority,
+        Port = port,
+        Username = Uri.UnescapeDataString(username),
+        Password = Uri.UnescapeDataString(password),
+        Database = string.IsNullOrWhiteSpace(database) ? "postgres" : database,
         SslMode = SslMode.Require,
         Pooling = true,
         MaxPoolSize = 10
     };
 
-    foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+    foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
     {
         var kv = pair.Split('=', 2);
         if (kv.Length == 2 && kv[0].Equals("sslmode", StringComparison.OrdinalIgnoreCase))
