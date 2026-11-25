@@ -10,19 +10,6 @@
     var identityLine = Model.IsAuthenticated
         ? $"{Model.RoleName} · {(string.IsNullOrEmpty(Model.OrganizationName) ? "集团总部" : Model.OrganizationName)}"
         : "尚未登录 · 仅可查看概览";
-    var flowCurrentStage = batch == null || batch.Status == BatchStatus.Draft ? 0
-        : batch.Status == BatchStatus.Archived ? 4
-        : Model.PendingCount > 0 ? 2
-        : Model.FormApproved + Model.FormReturned > 0 ? 3
-        : 1;
-    var flowStages = new[]
-    {
-        new { Title = "草稿", Meta = $"{Model.FormDraft} 单待完善", Detail = "填报员在本部门工作区编制预算。草稿可持续修改，金额变动由系统计算。" },
-        new { Title = "提交", Meta = $"{Model.FormSubmitted + Model.FormApproved + Model.FormReturned} / {Model.FormTotal} 单已提交", Detail = "填报完成后提交，系统记录版本与提交时间；超过偏差阈值时需填写说明。" },
-        new { Title = "集团审核", Meta = $"{Model.PendingCount} 单待审核", Detail = "集团审核员核对部门预算与基准数据，可通过或退回并填写审核意见。" },
-        new { Title = "通过 / 退回", Meta = $"通过 {Model.FormApproved} · 退回 {Model.FormReturned}", Detail = "审核通过后进入归档准备；退回单据可按意见修订后重新提交。" },
-        new { Title = "归档", Meta = batch?.Status == BatchStatus.Archived ? "批次已归档" : "等待批次归档", Detail = "批次归档后，相关预算版本与审核记录保留，汇总数据可供导出与追溯。" }
-    };
 }
 
 <div class="home-page">
@@ -253,92 +240,6 @@
         </div>
     </section>
 
-    <section class="panel" id="flow">
-        <div class="panel-head">
-            <h2>报送流程</h2>
-            <span>自然年度 · 一年一报 · 全程留痕</span>
-        </div>
-        <div class="flow-summary">
-            <span class="flow-current-label">当前阶段</span>
-            <strong>@flowStages[flowCurrentStage].Title</strong>
-            <span class="flow-summary-meta">@(batch == null ? "等待管理员创建批次" : $"{Model.FormTotal} 个填报单 · 进度 {Model.ProgressPercent}%")</span>
-        </div>
-        <div class="workflow-visual">
-            <svg class="workflow-rail" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-                <path class="workflow-rail-base rail-1" d="M100 20 H300" />
-                <path class="workflow-rail-base rail-2" d="M300 20 H500" />
-                <path class="workflow-rail-base rail-3" d="M500 20 H700" />
-                <path class="workflow-rail-base rail-4" d="M700 20 H900" />
-                <path class="workflow-rail-progress" d="M100 20 H900" pathLength="800" stroke-dasharray="800" stroke-dashoffset="@(800 - 200 * flowCurrentStage)" />
-                @for (var i = 0; i < flowStages.Length; i++)
-                {
-                    <circle class="workflow-rail-node @(i == flowCurrentStage ? "is-active" : "")" data-stage="@i" cx="@(100 + i * 200)" cy="20" r="5" />
-                }
-            </svg>
-            <ol class="workflow" aria-label="预算报送工作流">
-                @for (var i = 0; i < flowStages.Length; i++)
-                {
-                    var stage = flowStages[i];
-                    <li class="workflow-item @(i == flowCurrentStage ? "is-expanded" : "") @(i < flowCurrentStage ? "is-past" : "")">
-                        <button type="button" class="workflow-step" data-stage="@i" data-title="@stage.Title"
-                                aria-expanded="@(i == flowCurrentStage ? "true" : "false")"
-                                aria-controls="workflow-detail-@i" @(i == flowCurrentStage ? "aria-current=step" : null)>
-                            <span class="workflow-index" aria-hidden="true">0@(i + 1)</span>
-                            <span class="workflow-title">@stage.Title</span>
-                            <span class="workflow-extra" id="workflow-detail-@i" aria-hidden="@(i == flowCurrentStage ? "false" : "true")">
-                                <span class="workflow-meta">@stage.Meta</span>
-                                <span class="workflow-description">@stage.Detail</span>
-                                @if (i == 3)
-                                {
-                                    <span class="workflow-branches"><span>通过 @Model.FormApproved</span><span>退回 @Model.FormReturned</span></span>
-                                }
-                            </span>
-                        </button>
-                    </li>
-                }
-            </ol>
-        </div>
-    </section>
+    @await Html.PartialAsync("_WorkflowSlider", Model.Workflow)
 
 </div>
-
-@section Scripts {
-    <script>
-        (() => {
-            const visual = document.querySelector('.workflow-visual');
-            const items = Array.from(document.querySelectorAll('.workflow-item'));
-            const steps = items.map((item) => item.querySelector('.workflow-step'));
-            const nodes = visual.querySelectorAll('.workflow-rail-node');
-            const progress = visual.querySelector('.workflow-rail-progress');
-            const select = (index) => {
-                items.forEach((item, itemIndex) => {
-                    const step = steps[itemIndex];
-                    const expanded = itemIndex === index;
-                    item.classList.toggle('is-expanded', expanded);
-                    item.classList.toggle('is-past', itemIndex < index);
-                    step.setAttribute('aria-expanded', String(expanded));
-                    step.querySelector('.workflow-extra').setAttribute('aria-hidden', String(!expanded));
-                    if (step.hasAttribute('aria-current')) step.removeAttribute('aria-current');
-                    if (expanded) step.setAttribute('aria-current', 'step');
-                });
-                nodes.forEach((node, nodeIndex) => node.classList.toggle('is-active', nodeIndex === index));
-                progress.style.strokeDashoffset = String(800 - 200 * index);
-            };
-
-            steps.forEach((step, index) => {
-                step.addEventListener('click', () => select(index));
-                step.addEventListener('keydown', (event) => {
-                    const direction = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1
-                        : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
-                    if (direction) {
-                        event.preventDefault();
-                        steps[(index + direction + steps.length) % steps.length].focus();
-                    } else if (event.key === 'Home' || event.key === 'End') {
-                        event.preventDefault();
-                        steps[event.key === 'Home' ? 0 : steps.length - 1].focus();
-                    }
-                });
-            });
-        })();
-    </script>
-}

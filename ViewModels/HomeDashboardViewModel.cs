@@ -38,4 +38,7 @@ public class HomeDashboardViewModel
     /// <summary>已提交或已审核（通过/退回）的单据占比（0-100）。</summary>
     public int ProgressPercent
         => FormTotal == 0 ? 0 : (int)Math.Round((FormSubmitted + FormApproved + FormReturned) * 100m / FormTotal);
+
+    public WorkflowSliderViewModel Workflow
+        => WorkflowSliderViewModel.Create(Batch, FormDraft, FormSubmitted, FormApproved, FormReturned, FormTotal, PendingCount);
 }

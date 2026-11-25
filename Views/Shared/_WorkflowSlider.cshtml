@@ -1,0 +1,235 @@
+@model GroupBudget.ViewModels.WorkflowSliderViewModel
+<section class="panel" id="flow">
+    <div class="panel-head">
+        <h2>报送流程</h2>
+        <span>自然年度 · 一年一报 · 全程留痕</span>
+    </div>
+    <div class="flow-summary">
+        <span class="flow-current-label">当前阶段</span>
+        <strong id="workflow-current-title">@Model.Stages[Model.CurrentStage].Title</strong>
+        <span class="flow-summary-meta">@Model.Summary</span>
+    </div>
+    <div class="workflow-viewport" id="workflow-viewport" role="region" aria-label="报送流程阶段" tabindex="0">
+        <div class="workflow-visual" id="workflow-slider" data-stage="@Model.CurrentStage">
+            <svg class="workflow-rail" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                <path class="workflow-rail-base rail-1" d="M100 20 H300" />
+                <path class="workflow-rail-base rail-2" d="M300 20 H500" />
+                <path class="workflow-rail-base rail-3" d="M500 20 H700" />
+                <path class="workflow-rail-base rail-4" d="M700 20 H900" />
+                <path class="workflow-rail-progress" d="M100 20 H900" pathLength="800" stroke-dasharray="800" stroke-dashoffset="@(800 - 200 * Model.CurrentStage)" />
+                @for (var index = 0; index < Model.Stages.Count; index++)
+                {
+                    <circle class="workflow-rail-node @(index == Model.CurrentStage ? "is-active" : "")" data-stage="@index" cx="@(100 + index * 200)" cy="20" r="5" />
+                }
+            </svg>
+            <ol class="workflow" aria-label="预算报送工作流">
+                @for (var index = 0; index < Model.Stages.Count; index++)
+                {
+                    var stage = Model.Stages[index];
+                    <li class="workflow-item @(index == Model.CurrentStage ? "is-expanded" : "") @(index < Model.CurrentStage ? "is-past" : "")" data-stage="@index">
+                        <button type="button" class="workflow-step" data-title="@stage.Title"
+                                aria-expanded="true" aria-controls="workflow-fallback-detail-@index workflow-detail-panel-@index"
+                                @(index == Model.CurrentStage ? "aria-current=step" : null)>
+                            <span class="workflow-index" aria-hidden="true">0@(index + 1)</span>
+                            <span class="workflow-title">@stage.Title</span>
+                            <span class="workflow-active-meta">@stage.Meta</span>
+                            <span class="workflow-fallback-detail" id="workflow-fallback-detail-@index">@stage.Detail</span>
+                        </button>
+                    </li>
+                }
+            </ol>
+        </div>
+    </div>
+    <div class="workflow-detail-panels" id="workflow-detail-panels" aria-live="polite" aria-atomic="true">
+        @for (var index = 0; index < Model.Stages.Count; index++)
+        {
+            var stage = Model.Stages[index];
+            <section class="workflow-detail-panel @(index == 0 ? "is-active" : "")" id="workflow-detail-panel-@index" data-stage-panel="@index" @(index == 0 ? null : "hidden")>
+                <h3>@stage.Title</h3>
+                <span class="workflow-detail-meta">@stage.Meta</span>
+                <p>@stage.Detail</p>
+            </section>
+        }
+    </div>
+</section>
+<script>
+    (() => {
+        const viewport = document.getElementById('workflow-viewport');
+        const visual = document.getElementById('workflow-slider');
+        if (!viewport || !visual) return;
+
+        const items = Array.from(visual.querySelectorAll('.workflow-item'));
+        const steps = items.map((item) => item.querySelector('.workflow-step'));
+        const nodes = visual.querySelectorAll('.workflow-rail-node');
+        const progress = visual.querySelector('.workflow-rail-progress');
+        const panels = Array.from(document.querySelectorAll('.workflow-detail-panel'));
+        const detailPanels = document.getElementById('workflow-detail-panels');
+        const currentTitle = document.getElementById('workflow-current-title');
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let activeIndex = Number(visual.dataset.stage) || 0;
+        let panelTimer;
+        let scrollTimer;
+        let dragStart;
+        let suppressClick = false;
+        let lastWheelStep = 0;
+
+        visual.classList.add('is-enhanced');
+        viewport.classList.add('is-enhanced');
+        detailPanels.classList.add('is-enhanced');
+        steps.forEach((step, index) => {
+            step.querySelectorAll('.workflow-fallback-detail').forEach((detail) => detail.setAttribute('aria-hidden', 'true'));
+            step.setAttribute('aria-expanded', String(index === activeIndex));
+            step.querySelector('.workflow-active-meta').setAttribute('aria-hidden', String(index !== activeIndex));
+        });
+
+        const showPanel = (index, animate) => {
+            const newPanel = panels[index];
+            if (!newPanel) return;
+            if (panelTimer) clearTimeout(panelTimer);
+            if (!animate || reducedMotion) {
+                panels.forEach((panel, panelIndex) => {
+                    panel.hidden = panelIndex !== index;
+                    panel.classList.toggle('is-active', panelIndex === index);
+                    panel.classList.remove('is-leaving', 'is-entering');
+                });
+                return;
+            }
+            if (!newPanel.hidden && panels.filter((panel) => !panel.hidden).length === 1) return;
+            const outgoing = panels.filter((panel) => !panel.hidden && panel !== newPanel);
+            panels.forEach((panel) => panel.classList.remove('is-entering'));
+            outgoing.forEach((panel) => {
+                panel.classList.add('is-leaving');
+                panel.classList.remove('is-active');
+            });
+            newPanel.hidden = false;
+            newPanel.classList.remove('is-leaving');
+            newPanel.classList.add('is-active', 'is-entering');
+            requestAnimationFrame(() => requestAnimationFrame(() => newPanel.classList.remove('is-entering')));
+            panelTimer = setTimeout(() => {
+                panels.forEach((panel) => {
+                    panel.hidden = panel !== newPanel;
+                    panel.classList.toggle('is-active', panel === newPanel);
+                    panel.classList.remove('is-leaving', 'is-entering');
+                });
+            }, 90);
+        };
+
+        const select = (index, shouldScroll = true, animate = true, emit = true) => {
+            index = Math.max(0, Math.min(steps.length - 1, index));
+            activeIndex = index;
+            visual.dataset.stage = String(index);
+            items.forEach((item, itemIndex) => {
+                const step = steps[itemIndex];
+                const expanded = itemIndex === index;
+                item.classList.toggle('is-expanded', expanded);
+                item.classList.toggle('is-past', itemIndex < index);
+                step.setAttribute('aria-expanded', String(expanded));
+                step.querySelector('.workflow-active-meta').setAttribute('aria-hidden', String(!expanded));
+                step.querySelectorAll('.workflow-fallback-detail').forEach((detail) => detail.setAttribute('aria-hidden', String(!expanded)));
+                if (step.hasAttribute('aria-current')) step.removeAttribute('aria-current');
+                if (expanded) step.setAttribute('aria-current', 'step');
+            });
+            nodes.forEach((node, nodeIndex) => node.classList.toggle('is-active', nodeIndex === index));
+            progress.style.strokeDashoffset = String(800 - 200 * index);
+            currentTitle.textContent = steps[index].dataset.title;
+            showPanel(index, animate);
+            if (emit) document.dispatchEvent(new CustomEvent('workflowstagechange', { detail: { stage: index, title: steps[index].dataset.title } }));
+
+            if (shouldScroll) {
+                const itemRect = items[index].getBoundingClientRect();
+                const viewportRect = viewport.getBoundingClientRect();
+                const target = viewport.scrollLeft + itemRect.left - viewportRect.left + itemRect.width / 2 - viewport.clientWidth / 2;
+                viewport.scrollTo({ left: Math.max(0, target), behavior: reducedMotion ? 'auto' : 'smooth' });
+            }
+        };
+
+        steps.forEach((step, index) => {
+            step.addEventListener('click', (event) => {
+                if (suppressClick) {
+                    event.preventDefault();
+                    suppressClick = false;
+                    return;
+                }
+                select(index);
+            });
+            step.addEventListener('keydown', (event) => {
+                const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+                if (direction) {
+                    event.preventDefault();
+                    const next = Math.max(0, Math.min(steps.length - 1, index + direction));
+                    steps[next].focus();
+                    select(next);
+                } else if (event.key === 'Home' || event.key === 'End') {
+                    event.preventDefault();
+                    const next = event.key === 'Home' ? 0 : steps.length - 1;
+                    steps[next].focus();
+                    select(next);
+                }
+            });
+        });
+
+        viewport.addEventListener('keydown', (event) => {
+            if (event.target !== viewport) return;
+            const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+            if (!direction) return;
+            event.preventDefault();
+            const next = Math.max(0, Math.min(steps.length - 1, activeIndex + direction));
+            steps[next].focus();
+            select(next);
+        });
+        viewport.addEventListener('wheel', (event) => {
+            const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+            if (!delta) return;
+            event.preventDefault();
+            if (viewport.scrollWidth > viewport.clientWidth) {
+                viewport.scrollBy({ left: delta, behavior: 'auto' });
+            } else if (Date.now() - lastWheelStep > 280) {
+                lastWheelStep = Date.now();
+                select(activeIndex + (delta > 0 ? 1 : -1));
+            }
+        }, { passive: false });
+        viewport.addEventListener('pointerdown', (event) => {
+            if (event.pointerType !== 'mouse' || event.button !== 0) return;
+            dragStart = { x: event.clientX, scroll: viewport.scrollLeft, moved: false };
+            viewport.setPointerCapture(event.pointerId);
+        });
+        viewport.addEventListener('pointermove', (event) => {
+            if (!dragStart) return;
+            const delta = event.clientX - dragStart.x;
+            if (Math.abs(delta) > 4) dragStart.moved = true;
+            if (dragStart.moved) {
+                suppressClick = true;
+                event.preventDefault();
+                viewport.scrollLeft = dragStart.scroll - delta;
+            }
+        });
+        const finishDrag = () => {
+            if (dragStart?.moved) setTimeout(() => { suppressClick = false; }, 0);
+            dragStart = null;
+        };
+        viewport.addEventListener('pointerup', finishDrag);
+        viewport.addEventListener('pointercancel', finishDrag);
+        viewport.addEventListener('scroll', () => {
+            if (scrollTimer) clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(() => {
+                const center = viewport.getBoundingClientRect().left + viewport.clientWidth / 2;
+                const nearest = items.reduce((best, item, index) => {
+                    const rect = item.getBoundingClientRect();
+                    const distance = Math.abs(rect.left + rect.width / 2 - center);
+                    return distance < best.distance ? { index, distance } : best;
+                }, { index: activeIndex, distance: Number.POSITIVE_INFINITY });
+                if (nearest.index !== activeIndex) select(nearest.index, false);
+            }, 80);
+        }, { passive: true });
+
+        select(activeIndex, false, false, false);
+        const activeRect = items[activeIndex].getBoundingClientRect();
+        const viewportRect = viewport.getBoundingClientRect();
+        viewport.scrollLeft = Math.max(0, viewport.scrollLeft + activeRect.left - viewportRect.left + activeRect.width / 2 - viewport.clientWidth / 2);
+        if (!reducedMotion) {
+            const targetOffset = 800 - 200 * activeIndex;
+            progress.style.strokeDashoffset = '800';
+            requestAnimationFrame(() => { progress.style.strokeDashoffset = String(targetOffset); });
+        }
+    })();
+</script>

@@ -1,6 +1,7 @@
 using GroupBudget.Data;
 using GroupBudget.Models;
 using GroupBudget.ViewModels;
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -32,6 +33,26 @@ public class AnalyticsController : AppControllerBase
         {
             return View(vm);
         }
+
+        var formStates = await Db.FilingForms
+            .Where(form => form.BudgetBatchId == batch.Id)
+            .Select(form => new { form.OrganizationId, form.Status })
+            .ToListAsync();
+        var formDraft = formStates.Count(form => form.Status == FormStatus.Draft);
+        var formSubmitted = formStates.Count(form => form.Status == FormStatus.Submitted);
+        var formApproved = formStates.Count(form => form.Status == FormStatus.Approved);
+        var formReturned = formStates.Count(form => form.Status == FormStatus.Returned);
+        var formStatusByOrganization = formStates
+            .GroupBy(form => form.OrganizationId)
+            .ToDictionary(group => group.Key, group => group.Last().Status);
+        vm.Workflow = WorkflowSliderViewModel.Create(
+            batch,
+            formDraft,
+            formSubmitted,
+            formApproved,
+            formReturned,
+            formStates.Count,
+            formSubmitted);
 
         var organizations = await Db.Organizations
             .OrderBy(o => o.Id)
@@ -66,7 +87,7 @@ public class AnalyticsController : AppControllerBase
         // 直接汇总基准会让集团合计少掉其他部门的人员费用（约 1,234 万），执行率严重偏低。
         var actualDetails = await Db.ActualDetails
             .Where(a => a.BudgetBatchId == batch.Id && a.SubjectId != null)
-            .Select(a => new { a.SubjectId, a.ExpenseType, a.AccountAmount })
+            .Select(a => new { a.OrganizationId, a.SubjectId, a.ExpenseType, a.AccountAmount })
             .ToListAsync();
 
         const string ProjectType = "项目支出";
@@ -116,6 +137,62 @@ public class AnalyticsController : AppControllerBase
             .ToList();
 
         vm.Departments = deptRows.OrderByDescending(d => d.Budget).ThenByDescending(d => d.Actual).ToList();
+
+        foreach (var org in organizations)
+        {
+            var orgBaselines = baselines.Where(b => b.OrganizationId == org.Id).ToList();
+            var orgActuals = actualDetails.Where(a => a.OrganizationId == org.Id).ToList();
+            var orgPlans = plans.Where(p => p.OrganizationId == org.Id).ToList();
+            var categoryNames = orgBaselines.Select(b => subjectMap.TryGetValue(b.SubjectId, out var s) ? s.Category : null)
+                .Concat(orgActuals.Select(a => a.SubjectId.HasValue && subjectMap.TryGetValue(a.SubjectId.Value, out var s) ? s.Category : null))
+                .Concat(orgPlans.Select(p => subjectMap.TryGetValue(p.SubjectId, out var s) ? s.Category : null))
+                .Select(name => string.IsNullOrWhiteSpace(name) ? "未分类" : name)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(name => name, StringComparer.Ordinal);
+
+            var chartRow = new DepartmentChartData
+            {
+                Id = org.Id,
+                Name = org.Name,
+                WorkflowStatus = formStatusByOrganization.GetValueOrDefault(org.Id, string.Empty),
+                Budget = orgBaselines.Sum(b => b.BudgetBaseline + b.BudgetBaselineProject),
+                Actual = orgActuals.Sum(a => a.AccountAmount),
+                Plan = orgPlans.Sum(p => p.Budget2027)
+            };
+
+            foreach (var category in categoryNames)
+            {
+                var ids = subjectMap.Values.Where(s => (string.IsNullOrWhiteSpace(s.Category) ? "未分类" : s.Category) == category).Select(s => s.Id).ToHashSet();
+                chartRow.Categories.Add(new CategoryChartData
+                {
+                    Name = category!,
+                    Budget = orgBaselines.Where(b => ids.Contains(b.SubjectId)).Sum(b => b.BudgetBaseline + b.BudgetBaselineProject),
+                    Actual = orgActuals.Where(a => a.SubjectId.HasValue && ids.Contains(a.SubjectId.Value)).Sum(a => a.AccountAmount),
+                    Plan = orgPlans.Where(p => ids.Contains(p.SubjectId)).Sum(p => p.Budget2027)
+                });
+            }
+
+            if (chartRow.Budget != 0m || chartRow.Actual != 0m || chartRow.Plan != 0m)
+            {
+                vm.ChartDepartments.Add(chartRow);
+            }
+        }
+
+        vm.ChartDepartments = vm.ChartDepartments
+            .OrderByDescending(d => d.Plan)
+            .ThenBy(d => d.Name, StringComparer.Ordinal)
+            .ToList();
+
+        if (vm.ChartDepartments.Count > 0)
+        {
+            var largestChange = vm.ChartDepartments
+                .OrderByDescending(d => Math.Abs(d.Plan - d.Actual))
+                .First();
+            var rateText = vm.ExecRate.HasValue ? (vm.ExecRate.Value * 100m).ToString("0.0", CultureInfo.InvariantCulture) + "%" : "无法计算";
+            var deltaText = vm.PlanChangeAmount.ToString("N2", CultureInfo.InvariantCulture);
+            var departmentDelta = (largestChange.Plan - largestChange.Actual).ToString("N2", CultureInfo.InvariantCulture);
+            vm.InsightSummary = $"当前执行率为 {rateText}；计划较决算变动 {deltaText} 元。变动额最大的部门为 {largestChange.Name}，差额 {departmentDelta} 元。";
+        }
 
         // —— 按费用类别 ——
         var catRows = new List<ExecutionRow>();

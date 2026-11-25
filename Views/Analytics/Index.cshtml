@@ -1,13 +1,11 @@
-@model GroupBudget.ViewModels.ExecutionAnalysisViewModel
+﻿@model GroupBudget.ViewModels.ExecutionAnalysisViewModel
 @using System.Globalization
+@using System.Text.Json
 @{
     ViewData["Title"] = "执行分析";
-    ViewData["BodyClass"] = "home-body";
+    ViewData["BodyClass"] = "viz-body";
 
     var batch = Model.Batch;
-    var circumference = 2m * (decimal)Math.PI * 50m;
-    var ringDash = Math.Round(Math.Min(Model.ExecRate ?? 0m, 1m) * circumference, 1);
-    var dashArray = ringDash.ToString("0.#", CultureInfo.InvariantCulture) + " " + circumference.ToString("0.#", CultureInfo.InvariantCulture);
     var execScale = Model.ExecScale;
 
     Func<decimal?, string> pct = v => v == null ? "—" : (v.Value * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%";
@@ -18,6 +16,29 @@
 
     var topAmountScale = Model.TopSubjects.Select(s => Math.Abs(s.ChangeAmount)).DefaultIfEmpty(0m).Max();
     var clippedDepartments = Model.Departments.Count(d => d.ChangeRate != null && Math.Abs(d.ChangeRate.Value) > 1m);
+    var metricAmountWidth = new[] { money(Model.BudgetTotal).Length, money(Model.ActualTotal).Length, money(Model.PlanTotal).Length }.Max();
+    var chartJson = JsonSerializer.Serialize(Model.ChartDepartments, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    var initialDepartment = Model.ChartDepartments.FirstOrDefault(d => d.Plan > 0m) ?? Model.ChartDepartments.FirstOrDefault();
+    var chartWidth = 1120m;
+    var chartLeft = 88m;
+    var chartRight = 1100m;
+    var chartTop = 34m;
+    var chartBaseline = 360m;
+    var chartPlotHeight = chartBaseline - chartTop;
+    var chartMaximum = Math.Max(1m, Model.ChartDepartments.SelectMany(d => new[] { d.Budget, d.Actual, d.Plan }).DefaultIfEmpty(0m).Max() * 1.08m);
+    var chartGroupWidth = (chartRight - chartLeft) / Math.Max(1, Model.ChartDepartments.Count);
+    var chartBarWidth = Math.Min(18m, chartGroupWidth * .19m);
+    var chartBarGap = 3m;
+    var donutCircumference = 2m * (decimal)Math.PI * 43m;
+    var donutColors = new[] { "#11161b", "#4a535c", "#737d87", "#9ba4ad", "#c2c8ce", "#dce0e4" };
+    var chartCategories = Model.ChartDepartments.SelectMany(d => d.Categories).Select(c => c.Name).Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal).ToList();
+    var initialDonutSlices = chartCategories.Select(name => new
+    {
+        Name = name,
+        Amount = initialDepartment?.Categories.FirstOrDefault(c => c.Name == name)?.Actual ?? 0m
+    }).ToList();
+    var initialDonutTotal = initialDonutSlices.Sum(s => s.Amount);
+    var visibleDonutSlices = initialDonutSlices.Where(s => s.Amount > 0m).ToList();
 }
 
 <div class="viz-page">
@@ -38,6 +59,7 @@
                 }
             </p>
         </div>
+
         <div class="head-actions">
             <a class="viz-btn" asp-controller="Summary" asp-action="Index">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" /></svg>
@@ -62,60 +84,178 @@
     {
         <!-- ================= KPI ================= -->
         <section class="viz-kpi" aria-label="关键指标">
-            <div class="kpi kpi-ring">
-                <svg class="donut" viewBox="0 0 120 120" role="img"
-                     aria-label="2026 年 1–10 月预算执行率 @pct(Model.ExecRate)">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#eef0f3" stroke-width="9" />
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#11161b" stroke-width="9"
-                            stroke-linecap="round" transform="rotate(-90 60 60)"
-                            stroke-dasharray="@dashArray" />
-                </svg>
-                <div class="ring-text">
-                    <div class="k">@batch.BaselineYear 年 1–10 月执行率</div>
-                    <div class="v">@pct(Model.ExecRate)</div>
-                    <div class="note">决算 ÷ 预算，未年化</div>
-                </div>
-            </div>
-
             <div class="kpi">
-                <div class="k">@batch.BaselineYear 年预算合计</div>
-                <div class="v">@money(Model.BudgetTotal)<small>元</small></div>
-                <div class="note">
-                    <span class="line">基本 <b>@money(Model.BasicBudget)</b></span>
-                    <span class="line">项目 <b>@money(Model.ProjectBudget)</b></span>
-                    <span class="line">@(Model.Departments.Count + Model.ChartExcludedDepartments.Count) 个部门</span>
-                </div>
+                <div class="k metric-label" data-base-label="@batch.BaselineYear 年预算">@batch.BaselineYear 年预算</div>
+                <div class="v"><span class="metric-value" style="min-width:@(metricAmountWidth)ch" data-count-value="@Model.BudgetTotal.ToString(CultureInfo.InvariantCulture)">@money(Model.BudgetTotal)</span><small>元</small></div>
+                <div class="note">集团基准预算</div>
             </div>
-
             <div class="kpi">
-                <div class="k">@batch.BaselineYear 年决算合计</div>
-                <div class="v">@money(Model.ActualTotal)<small>元</small></div>
-                <div class="note">
-                    <span class="line">基本 <b>@money(Model.BasicActual)</b></span>
-                    <span class="line">项目 <b>@(Model.ProjectActualPending ? "待归集" : money(Model.ProjectActual))</b></span>
-                    <span class="line"><span class="tag @(Model.OverBudgetDepartments > 0 ? "tag-warn" : "tag-flat")">超预算 @Model.OverBudgetDepartments 个部门</span></span>
-                </div>
+                <div class="k metric-label" data-base-label="@batch.BaselineYear 年决算">@batch.BaselineYear 年决算</div>
+                <div class="v"><span class="metric-value" style="min-width:@(metricAmountWidth)ch" data-count-value="@Model.ActualTotal.ToString(CultureInfo.InvariantCulture)">@money(Model.ActualTotal)</span><small>元</small></div>
+                <div class="note">实际发生数</div>
             </div>
-
             <div class="kpi">
-                <div class="k">@batch.PlanYear 年预算合计</div>
-                <div class="v">@money(Model.PlanTotal)<small>元</small></div>
-                <div class="note">
-                    @if (Model.HasPlan)
-                    {
-                        <text>较 @batch.BaselineYear 决算</text>
-                        <span class="tag @(Model.PlanChangeAmount > 0 ? "tag-up" : Model.PlanChangeAmount < 0 ? "tag-down" : "tag-flat")">@pctSigned(Model.PlanChangeRate)</span>
-                    }
-                    else
-                    {
-                        <span class="tag tag-flat">待部门填报</span>
-                    }
-                </div>
+                <div class="k metric-label" data-base-label="@batch.PlanYear 年预算">@batch.PlanYear 年预算</div>
+                <div class="v"><span class="metric-value" style="min-width:@(metricAmountWidth)ch" data-count-value="@Model.PlanTotal.ToString(CultureInfo.InvariantCulture)">@money(Model.PlanTotal)</span><small>元</small></div>
+                <div class="note">部门计划金额</div>
+            </div>
+            <div class="kpi">
+                <div class="k metric-label" data-base-label="@batch.BaselineYear 年执行率">@batch.BaselineYear 年执行率</div>
+                <div class="v"><span class="metric-value metric-rate" data-count-value="@((Model.ExecRate ?? 0m).ToString(CultureInfo.InvariantCulture))" data-is-null="@(Model.ExecRate == null ? "true" : "false")">@pct(Model.ExecRate)</span></div>
+                <div class="note">决算 ÷ 预算，未年化</div>
             </div>
         </section>
 
+        @await Html.PartialAsync("_WorkflowSlider", Model.Workflow)
+
+        <div class="chart-grid" id="analytics-dashboard" data-chart-data="@chartJson" data-category-order="@JsonSerializer.Serialize(chartCategories)" data-selected-department="@(initialDepartment?.Id ?? 0)">
+            <section class="viz-card bar-chart-card" aria-labelledby="department-chart-title">
+                <div class="viz-card-head">
+                    <div>
+                        <h2 id="department-chart-title">部门预算对照</h2>
+                        <div class="hint">按 @batch.PlanYear 年预算由高到低排序，金额单位：元</div>
+                    </div>
+                    <div class="chart-filters">
+                        <div class="chart-filter-group">
+                            <label for="department-filter">部门</label>
+                            <select id="department-filter" class="chart-filter">
+                                <option value="">全部部门</option>
+                                @foreach (var department in Model.ChartDepartments)
+                                {
+                                    <option value="@department.Id">@department.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="chart-filter-group">
+                            <label for="category-filter">类别</label>
+                            <select id="category-filter" class="chart-filter">
+                                <option value="">全部类别</option>
+                                @foreach (var category in Model.ChartDepartments.SelectMany(d => d.Categories).Select(c => c.Name).Distinct().OrderBy(c => c, StringComparer.Ordinal))
+                                {
+                                    <option value="@category">@category</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-legend" aria-label="图表系列">
+                    <span><i class="series-budget"></i>@batch.BaselineYear 预算</span>
+                    <span><i class="series-actual"></i>@batch.BaselineYear 决算</span>
+                    <span><i class="series-plan"></i>@batch.PlanYear 预算</span>
+                </div>
+                <div class="chart-scroll" tabindex="0" role="region" aria-label="部门预算对照图表，可左右滚动">
+                    <svg id="department-chart" class="department-chart" viewBox="0 0 @chartWidth 440" role="img" aria-labelledby="department-chart-title department-chart-description">
+                        <desc id="department-chart-description">各部门三年度预算与决算对照。图表数据也以文本表格提供。</desc>
+                        @for (var tick = 0; tick <= 4; tick++)
+                        {
+                            var y = chartBaseline - chartPlotHeight * tick / 4m;
+                            var value = chartMaximum * tick / 4m;
+                            <line class="chart-gridline" data-tick="@(tick / 4m).ToString(CultureInfo.InvariantCulture)" x1="@chartLeft" x2="@chartRight" y1="@y" y2="@y" />
+                            @:<text class="chart-axis-label" data-tick="@(tick / 4m).ToString(CultureInfo.InvariantCulture)" x="@((chartLeft - 10m).ToString(CultureInfo.InvariantCulture))" y="@((y + 4m).ToString(CultureInfo.InvariantCulture))" text-anchor="end">@money(value)</text>
+                        }
+                        @if (Model.ChartDepartments.Count == 0)
+                        {
+                            @:<text class="chart-empty" x="560" y="215" text-anchor="middle">暂无数据</text>
+                        }
+                        @for (var departmentIndex = 0; departmentIndex < Model.ChartDepartments.Count; departmentIndex++)
+                        {
+                            var department = Model.ChartDepartments[departmentIndex];
+                            var center = chartLeft + chartGroupWidth * (departmentIndex + .5m);
+                            var totalWidth = chartBarWidth * 3m + chartBarGap * 2m;
+                            var start = center - totalWidth / 2m;
+                            var values = new[] { department.Budget, department.Actual, department.Plan };
+                            <g class="chart-group" data-department-id="@department.Id" style="--bar-delay:@(departmentIndex * 30)ms" role="button" tabindex="0" aria-pressed="false"
+                               aria-label="@department.Name：@batch.BaselineYear 预算 @money(department.Budget) 元，@batch.BaselineYear 决算 @money(department.Actual) 元，@batch.PlanYear 预算 @money(department.Plan) 元">
+                                <title>@department.Name：预算 @money(department.Budget)；决算 @money(department.Actual)；计划 @money(department.Plan)</title>
+                                @for (var seriesIndex = 0; seriesIndex < values.Length; seriesIndex++)
+                                {
+                                    var amount = values[seriesIndex];
+                                    var x = start + seriesIndex * (chartBarWidth + chartBarGap);
+                                    var height = amount == 0m ? 0m : amount / chartMaximum * chartPlotHeight;
+                                    var y = chartBaseline - height;
+                                    var seriesLabel = seriesIndex == 0 ? "预算" : seriesIndex == 1 ? "决算" : "计划";
+                                    var variance = seriesIndex == 0 ? department.Actual - department.Budget : seriesIndex == 1 ? department.Actual - department.Budget : department.Plan - department.Actual;
+                                    <rect class="chart-bar series-@seriesIndex" data-series-index="@seriesIndex" data-amount="@amount.ToString(CultureInfo.InvariantCulture)" data-variance="@variance.ToString(CultureInfo.InvariantCulture)" data-department="@department.Name" data-series="@seriesLabel" x="@x" y="@y" width="@chartBarWidth" height="@height" style="display:@(amount == 0m ? "none" : "inline")" />
+                                    <line class="chart-zero-tick" data-series-index="@seriesIndex" x1="@x" x2="@(x + chartBarWidth)" y1="@chartBaseline" y2="@chartBaseline" style="display:@(amount == 0m ? "inline" : "none")" />
+                                }
+                                <text class="chart-department-label" x="@center" y="386" text-anchor="middle">@department.Name</text>
+                            </g>
+                        }
+                    </svg>
+                </div>
+                <div class="chart-scroll-hint">图表可左右滑动查看完整部门</div>
+                <div class="chart-tooltip" id="chart-tooltip" role="status" aria-hidden="true"></div>
+                <table class="visually-hidden" aria-live="polite">
+                    <caption>部门预算图表数据</caption>
+                    <thead><tr><th>部门</th><th>@batch.BaselineYear 预算</th><th>@batch.BaselineYear 决算</th><th>@batch.PlanYear 预算</th></tr></thead>
+                    <tbody id="chart-data-rows">
+                        @foreach (var department in Model.ChartDepartments)
+                        {
+                            <tr><th>@department.Name</th><td>@money(department.Budget)</td><td>@money(department.Actual)</td><td>@money(department.Plan)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="viz-card donut-chart-card" aria-labelledby="category-chart-title">
+                <div class="viz-card-head">
+                    <div>
+                        <h2 id="category-chart-title">部门费用构成</h2>
+                        <div class="hint">所选部门 · @batch.BaselineYear 年决算构成</div>
+                    </div>
+                </div>
+                <div class="donut-layout">
+                    <svg id="category-donut" class="category-donut" viewBox="0 0 140 140" role="img" aria-labelledby="donut-title donut-description">
+                        <title id="donut-title">部门费用类别构成</title>
+                        <desc id="donut-description">所选部门各费用类别的决算金额及比例。</desc>
+                        <circle class="donut-track" cx="70" cy="70" r="43" />
+                        @{
+                            var consumed = 0m;
+                        }
+                        @for (var categoryIndex = 0; categoryIndex < initialDonutSlices.Count; categoryIndex++)
+                        {
+                            var category = initialDonutSlices[categoryIndex];
+                            var length = initialDonutTotal > 0m ? category.Amount / initialDonutTotal * donutCircumference : 0m;
+                            var dash = length.ToString("0.##", CultureInfo.InvariantCulture) + " " + donutCircumference.ToString("0.##", CultureInfo.InvariantCulture);
+                            var offset = (-consumed).ToString("0.##", CultureInfo.InvariantCulture);
+                            consumed += length;
+                            <circle class="donut-slice" data-category="@category.Name" data-amount="@category.Amount.ToString(CultureInfo.InvariantCulture)" data-color="@donutColors[categoryIndex % donutColors.Length]" cx="70" cy="70" r="43" stroke="@donutColors[categoryIndex % donutColors.Length]" stroke-dasharray="@dash" stroke-dashoffset="@offset" style="--donut-start:@((consumed - length - donutCircumference).ToString("0.##", CultureInfo.InvariantCulture));--donut-target:@offset;stroke-dashoffset:@offset" tabindex="0" role="img" aria-label="@category.Name：@money(category.Amount) 元" />
+                        }
+                        <text class="donut-total" id="donut-total" x="70" y="68" text-anchor="middle">@money(initialDonutTotal)</text>
+                        <text class="donut-caption" id="donut-caption" x="70" y="84" text-anchor="middle">@(initialDonutTotal > 0m ? "合计 · 元" : "暂无计划")</text>
+                    </svg>
+                    <ul class="donut-legend" id="donut-legend" aria-label="费用类别图例">
+                        @for (var categoryIndex = 0; categoryIndex < visibleDonutSlices.Count; categoryIndex++)
+                        {
+                            var category = visibleDonutSlices[categoryIndex];
+                            var color = donutColors[chartCategories.IndexOf(category.Name) % donutColors.Length];
+                            <li><i style="background-color:@color"></i><span>@category.Name</span><b>@money(category.Amount)</b></li>
+                        }
+                        @if (visibleDonutSlices.Count == 0)
+                        {
+                            <li class="donut-empty">暂无类别决算金额</li>
+                        }
+                    </ul>
+                </div>
+                <table class="visually-hidden" aria-live="polite">
+                    <caption>费用类别构成数据</caption>
+                    <tbody id="donut-data-rows">
+                        @foreach (var category in initialDonutSlices)
+                        {
+                            <tr><th>@category.Name</th><td>@money(category.Amount)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        </div>
+
+        <section class="insight-summary" id="insight-summary" aria-live="polite" aria-atomic="true">
+            <span class="insight-label">数据摘要</span>
+            <p>@Model.InsightSummary</p>
+        </section>
+
         <!-- ================= 执行率 ================= -->
-        <section class="viz-card">
+        <section class="viz-card legacy-viz">
             <div class="viz-card-head">
                 <div>
                     <h2>部门预算执行率</h2>
@@ -166,7 +306,7 @@
         </section>
 
         <!-- ================= 增减率 ================= -->
-        <section class="viz-card">
+        <section class="viz-card legacy-viz">
             <div class="viz-card-head">
                 <div>
                     <h2>部门增减比例</h2>
@@ -349,10 +489,430 @@
         <div class="viz-foot">
             <div><b>执行率</b> ＝ @batch.BaselineYear 年决算 ÷ @batch.BaselineYear 年预算；决算数据为 1–10 月实际发生数，<b>未按 12 个月年化</b>，因此整体执行率偏低属正常。</div>
             <div><b>基本／项目单列</b>：基本支出预算 @money(Model.BasicBudget) 元、项目支出预算 @money(Model.ProjectBudget) 元，两者分别计算执行率，不再合并成一个分母。</div>
-            <div><b>口径</b>：全部数据取「实际发生数」明细全量 @money(Model.ActualTotal) 元；人员费用按预算归属统一计入人事部，集团合计与各部门合计一致。@if (Model.ChartExcludedDepartments.Count > 0) { <text>@(string.Join("、", Model.ChartExcludedDepartments.Select(e => e.Name)))本年预算为 0，不进图表（执行率无分母），只在汇总表明细列示。</text> }</div>
+            <div><b>口径</b>：决算取「实际发生数」明细全量 @money(Model.ActualTotal) 元；人员费用按预算归属统一计入人事部，集团合计与各部门合计一致。@if (Model.ChartExcludedDepartments.Count > 0) { <text>@(string.Join("、", Model.ChartExcludedDepartments.Select(e => e.Name)))预算为 0，金额仍列入部门对照，执行率无分母。</text> }</div>
             <div><b>增减比例</b> ＝（@batch.PlanYear 年预算 − @batch.BaselineYear 年决算）÷ @batch.BaselineYear 年决算，比较基数与填报页「较上年决算增减」完全一致。</div>
-            <div><b>颜色</b>：金额增加为红、减少为绿；执行率超过 100% 的条形转红表示超预算。</div>
-            <div><b>提示</b>：@batch.PlanYear 年预算已清空，等待各部门重新填报；填报前增减比例不具参考意义。</div>
+            <div><b>图例</b>：三个金额系列以墨色层级区分，蓝色仅标示当前选择。</div>
+            <div><b>填报状态</b>：@(Model.HasPlan ? $"当前已录入 {batch.PlanYear} 年计划金额。" : $"当前尚无 {batch.PlanYear} 年计划金额，增减对照暂不可用。")</div>
         </div>
     }
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const dashboard = document.getElementById('analytics-dashboard');
+            if (!dashboard) return;
+
+            dashboard.classList.add('is-enhanced');
+            const data = JSON.parse(dashboard.dataset.chartData);
+            const svgNs = 'http://www.w3.org/2000/svg';
+            const chart = document.getElementById('department-chart');
+            const groups = Array.from(chart.querySelectorAll('.chart-group'));
+            const groupById = new Map(groups.map((group) => [Number(group.dataset.departmentId), group]));
+            const departmentById = new Map(data.map((department) => [department.id, department]));
+            const departmentFilter = document.getElementById('department-filter');
+            const categoryFilter = document.getElementById('category-filter');
+            const tooltip = document.getElementById('chart-tooltip');
+            const donut = document.getElementById('category-donut');
+            const donutLegend = document.getElementById('donut-legend');
+            const donutTotal = document.getElementById('donut-total');
+            const donutCaption = document.getElementById('donut-caption');
+            const donutDataRows = document.getElementById('donut-data-rows');
+            const chartDataRows = document.getElementById('chart-data-rows');
+            const insight = document.querySelector('#insight-summary p');
+            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const moneyFormat = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const percentFormat = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+            const colors = ['#11161b', '#4a535c', '#737d87', '#9ba4ad', '#c2c8ce', '#dce0e4'];
+            const allCategories = JSON.parse(dashboard.dataset.categoryOrder);
+            const initialDepartmentId = Number(dashboard.dataset.selectedDepartment);
+            let activeDepartmentId = departmentById.has(initialDepartmentId) ? initialDepartmentId : (data[0]?.id ?? 0);
+            let metricRevision = 0;
+            let insightRevision = 0;
+            let axisTimer;
+            let workflowStageFilter = null;
+            let workflowStageTitle = '';
+            const stageStatuses = [
+                ['草稿', '已打回'],
+                ['已提交', '审核通过', '已打回'],
+                ['已提交'],
+                ['审核通过', '已打回'],
+                null
+            ];
+            const matchesWorkflowStage = (department) => {
+                const allowed = workflowStageFilter == null ? null : stageStatuses[workflowStageFilter];
+                return allowed == null || allowed.includes(department.workflowStatus);
+            };
+
+            const valueFor = (department, series, categoryName) => {
+                if (!categoryName) return department[series];
+                return department.categories.find((category) => category.name === categoryName)?.[series] ?? 0;
+            };
+
+            const currentRows = () => {
+                const departmentId = Number(departmentFilter.value);
+                const categoryName = categoryFilter.value;
+                return data
+                    .filter((department) => (!departmentId || department.id === departmentId) && matchesWorkflowStage(department))
+                    .map((department) => ({
+                        department,
+                        values: ['budget', 'actual', 'plan'].map((series) => valueFor(department, series, categoryName))
+                    }))
+                    .sort((a, b) => b.values[2] - a.values[2] || a.department.name.localeCompare(b.department.name, 'zh-CN'));
+            };
+
+            const setTooltip = (bar, event) => {
+                const amount = Number(bar.dataset.amount);
+                const variance = Number(bar.dataset.variance);
+                tooltip.textContent = `${bar.dataset.department} · ${bar.dataset.series} ${moneyFormat.format(amount)} 元 · 较对照差额 ${variance > 0 ? '+' : ''}${moneyFormat.format(variance)} 元`;
+                tooltip.setAttribute('aria-hidden', 'false');
+                tooltip.classList.add('is-visible');
+                if (event && Number.isFinite(event.clientX)) {
+                    tooltip.style.left = `${Math.min(event.clientX + 12, window.innerWidth - tooltip.offsetWidth - 12)}px`;
+                    tooltip.style.top = `${Math.min(event.clientY + 12, window.innerHeight - tooltip.offsetHeight - 12)}px`;
+                }
+            };
+
+            const hideTooltip = () => {
+                tooltip.classList.remove('is-visible');
+                tooltip.setAttribute('aria-hidden', 'true');
+            };
+
+            const renderBars = (animate) => {
+                const rows = currentRows();
+                const maximum = Math.max(1, ...rows.flatMap((row) => row.values)) * 1.08;
+                const left = 88;
+                const right = 1100;
+                const top = 34;
+                const baseline = 360;
+                const plotHeight = baseline - top;
+                const groupWidth = (right - left) / Math.max(1, rows.length);
+                const barWidth = Math.min(18, groupWidth * .19);
+                const gap = 3;
+
+                if (animate) dashboard.classList.add('charts-ready');
+                if (animate) chart.querySelectorAll('.chart-axis-label').forEach((label) => label.classList.add('is-changing'));
+                chart.querySelectorAll('.chart-gridline').forEach((line) => {
+                    const tick = Number(line.dataset.tick);
+                    const y = baseline - plotHeight * tick / 4;
+                    line.setAttribute('y1', String(y));
+                    line.setAttribute('y2', String(y));
+                });
+                if (axisTimer) clearTimeout(axisTimer);
+                axisTimer = setTimeout(() => {
+                    chart.querySelectorAll('.chart-axis-label').forEach((label) => {
+                        label.textContent = moneyFormat.format(maximum * Number(label.dataset.tick));
+                        label.classList.remove('is-changing');
+                    });
+                }, animate && !reducedMotion ? 90 : 0);
+
+                const visibleIds = new Set(rows.map((row) => row.department.id));
+                groups.forEach((group) => {
+                    const id = Number(group.dataset.departmentId);
+                    group.style.display = visibleIds.has(id) ? '' : 'none';
+                    group.classList.toggle('is-selected', id === activeDepartmentId);
+                });
+
+                rows.forEach((row, rowIndex) => {
+                    const group = groupById.get(row.department.id);
+                    if (!group) return;
+                    chart.appendChild(group);
+                    group.setAttribute('aria-pressed', String(row.department.id === activeDepartmentId));
+                    const center = left + groupWidth * (rowIndex + .5);
+                    const totalWidth = barWidth * 3 + gap * 2;
+                    const start = center - totalWidth / 2;
+                    group.querySelector('.chart-department-label').setAttribute('x', String(center));
+                    group.querySelectorAll('.chart-bar').forEach((bar) => {
+                        const seriesIndex = Number(bar.dataset.seriesIndex);
+                        const amount = row.values[seriesIndex];
+                        const x = start + seriesIndex * (barWidth + gap);
+                        const previousHeight = Number(bar.getAttribute('height')) || 0;
+                        const height = amount > 0 ? amount / maximum * plotHeight : 0;
+                        const y = baseline - height;
+                        const variance = seriesIndex === 2 ? amount - row.values[1] : row.values[1] - row.values[0];
+                        bar.setAttribute('x', String(x));
+                        bar.setAttribute('width', String(barWidth));
+                        bar.setAttribute('y', String(y));
+                        bar.setAttribute('height', String(height));
+                        bar.dataset.amount = String(amount);
+                        bar.dataset.variance = String(variance);
+                        bar.dataset.department = row.department.name;
+                        bar.dataset.series = seriesIndex === 0 ? '预算' : seriesIndex === 1 ? '决算' : '计划';
+                        const tick = group.querySelector(`.chart-zero-tick[data-series-index="${seriesIndex}"]`);
+                        tick.setAttribute('x1', String(x));
+                        tick.setAttribute('x2', String(x + barWidth));
+                        tick.setAttribute('y1', String(baseline));
+                        tick.setAttribute('y2', String(baseline));
+                        if (bar._zeroTimer) clearTimeout(bar._zeroTimer);
+                        if (amount > 0) {
+                            bar.style.display = 'inline';
+                            tick.style.display = 'none';
+                        } else if (previousHeight > 0 && animate && !reducedMotion) {
+                            bar.style.display = 'inline';
+                            tick.style.display = 'none';
+                            bar._zeroTimer = setTimeout(() => {
+                                if (Number(bar.dataset.amount) === 0) {
+                                    bar.style.display = 'none';
+                                    tick.style.display = 'inline';
+                                }
+                            }, 230);
+                        } else {
+                            bar.style.display = 'none';
+                            tick.style.display = 'inline';
+                        }
+                    });
+                    group.setAttribute('aria-label', `${row.department.name}：预算 ${moneyFormat.format(row.values[0])} 元，决算 ${moneyFormat.format(row.values[1])} 元，计划 ${moneyFormat.format(row.values[2])} 元`);
+                });
+
+                let emptyLabel = chart.querySelector('.chart-empty');
+                if (rows.length === 0) {
+                    if (!emptyLabel) {
+                        emptyLabel = document.createElementNS(svgNs, 'text');
+                        emptyLabel.setAttribute('class', 'chart-empty');
+                        emptyLabel.setAttribute('x', '560');
+                        emptyLabel.setAttribute('y', '215');
+                        emptyLabel.setAttribute('text-anchor', 'middle');
+                        emptyLabel.textContent = '暂无数据';
+                        chart.appendChild(emptyLabel);
+                    }
+                } else if (emptyLabel) {
+                    emptyLabel.remove();
+                }
+
+                chartDataRows.replaceChildren(...rows.map((row) => {
+                    const tr = document.createElement('tr');
+                    [row.department.name, ...row.values.map((value) => moneyFormat.format(value))].forEach((value, index) => {
+                        const cell = document.createElement(index === 0 ? 'th' : 'td');
+                        cell.textContent = value;
+                        tr.appendChild(cell);
+                    });
+                    return tr;
+                }));
+            };
+
+            const renderDonut = () => {
+                const department = departmentById.get(activeDepartmentId);
+                const selectedCategory = categoryFilter.value;
+                const values = allCategories.filter((name) => !selectedCategory || name === selectedCategory).map((name) => ({
+                    name,
+                    amount: department?.categories.find((category) => category.name === name)?.actual ?? 0
+                }));
+                const total = values.reduce((sum, item) => sum + item.amount, 0);
+                const circumference = 2 * Math.PI * 43;
+                let consumed = 0;
+                const slices = new Map(Array.from(donut.querySelectorAll('.donut-slice')).map((slice) => [slice.dataset.category, slice]));
+
+                values.forEach((item, index) => {
+                    const slice = slices.get(item.name);
+                    if (!slice) return;
+                    const length = total > 0 ? item.amount / total * circumference : 0;
+                    slice.setAttribute('stroke', colors[index % colors.length]);
+                    slice.setAttribute('stroke-dasharray', `${length} ${circumference}`);
+                    slice.setAttribute('stroke-dashoffset', String(-consumed));
+                    slice.dataset.amount = String(item.amount);
+                    slice.style.display = item.amount > 0 ? '' : 'none';
+                    slice.setAttribute('aria-label', `${item.name}：${moneyFormat.format(item.amount)} 元，${total ? percentFormat.format(item.amount / total * 100) : '0.0'}%`);
+                    consumed += length;
+                });
+
+                donutTotal.textContent = moneyFormat.format(total);
+                donutCaption.textContent = '合计 · 元';
+                donut.dataset.total = String(total);
+                donutLegend.replaceChildren();
+                values.filter((item) => item.amount > 0).forEach((item) => {
+                    const li = document.createElement('li');
+                    const swatch = document.createElement('i');
+                    swatch.style.backgroundColor = colors[values.indexOf(item) % colors.length];
+                    const label = document.createElement('span');
+                    label.textContent = item.name;
+                    const amount = document.createElement('b');
+                    amount.textContent = moneyFormat.format(item.amount);
+                    li.append(swatch, label, amount);
+                    donutLegend.appendChild(li);
+                });
+                if (!values.some((item) => item.amount > 0)) {
+                    const empty = document.createElement('li');
+                    empty.className = 'donut-empty';
+                    empty.textContent = '暂无类别计划金额';
+                    donutLegend.appendChild(empty);
+                }
+
+                donutDataRows.replaceChildren(...values.filter((item) => item.amount > 0).map((item) => {
+                    const tr = document.createElement('tr');
+                    const heading = document.createElement('th');
+                    const amount = document.createElement('td');
+                    heading.textContent = item.name;
+                    amount.textContent = moneyFormat.format(item.amount);
+                    tr.append(heading, amount);
+                    return tr;
+                }));
+            };
+
+            const updateMetrics = (rows) => {
+                const budget = rows.reduce((sum, row) => sum + row.values[0], 0);
+                const actual = rows.reduce((sum, row) => sum + row.values[1], 0);
+                const plan = rows.reduce((sum, row) => sum + row.values[2], 0);
+                const values = [budget, actual, plan, budget === 0 ? null : actual / budget];
+                const departmentId = Number(departmentFilter.value);
+                const context = departmentId ? (departmentById.get(departmentId)?.name ?? '部门') : '集团';
+                const category = categoryFilter.value;
+
+                document.querySelectorAll('.metric-value').forEach((element, index) => {
+                    const value = values[index];
+                    const label = element.closest('.kpi').querySelector('.metric-label');
+                    label.textContent = `${context} · ${label.dataset.baseLabel}${category ? ` · ${category}` : ''}`;
+                    element._countFrame && cancelAnimationFrame(element._countFrame);
+                    const revision = metricRevision;
+                    element.classList.add('is-changing');
+                    setTimeout(() => {
+                        if (revision !== metricRevision) return;
+                        element.textContent = value == null ? '—' : index === 3 ? `${percentFormat.format(value * 100)}%` : moneyFormat.format(value);
+                        element.classList.remove('is-changing');
+                    }, reducedMotion ? 0 : 90);
+                });
+            };
+
+            const updateInsight = (rows) => {
+                const revision = ++insightRevision;
+                const budget = rows.reduce((sum, row) => sum + row.values[0], 0);
+                const actual = rows.reduce((sum, row) => sum + row.values[1], 0);
+                const plan = rows.reduce((sum, row) => sum + row.values[2], 0);
+                const category = categoryFilter.value;
+                const context = `${workflowStageTitle ? `${workflowStageTitle}阶段 · ` : ''}${category ? `当前类别「${category}」` : '当前筛选'}`;
+                let text;
+
+                if (rows.length === 0 || (budget === 0 && actual === 0 && plan === 0)) {
+                    text = `${context}暂无足够数据，无法计算执行率与部门变动。`;
+                } else {
+                    const highest = rows.reduce((best, row) => {
+                        const variance = row.values[2] - row.values[1];
+                        const score = Math.abs(variance);
+                        return !best || score > best.score ? { row, variance, score } : best;
+                    }, null);
+                    const rate = budget === 0 ? '无法计算' : `${percentFormat.format(actual / budget * 100)}%`;
+                    const delta = plan - actual;
+                    text = `${context}执行率为 ${rate}；计划较决算变动 ${delta > 0 ? '+' : ''}${moneyFormat.format(delta)} 元。变动额最大的部门为 ${highest.row.department.name}，差额 ${highest.variance > 0 ? '+' : ''}${moneyFormat.format(highest.variance)} 元。`;
+                }
+
+                insight.classList.add('is-changing');
+                setTimeout(() => {
+                    if (revision !== insightRevision) return;
+                    insight.textContent = text;
+                    insight.classList.remove('is-changing');
+                }, reducedMotion ? 0 : 100);
+            };
+
+            const refresh = (animate = true) => {
+                metricRevision++;
+                hideTooltip();
+                const rows = currentRows();
+                if (rows.length && !rows.some((row) => row.department.id === activeDepartmentId)) activeDepartmentId = rows[0].department.id;
+                if (!rows.length && workflowStageFilter != null) activeDepartmentId = 0;
+                renderBars(animate);
+                renderDonut();
+                updateMetrics(rows);
+                updateInsight(rows);
+            };
+
+            const selectDepartment = (id) => {
+                activeDepartmentId = id;
+                departmentFilter.value = String(id);
+                refresh(true);
+            };
+
+            departmentFilter.addEventListener('change', () => {
+                activeDepartmentId = Number(departmentFilter.value) || (data[0]?.id ?? 0);
+                refresh(true);
+            });
+            categoryFilter.addEventListener('change', () => refresh(true));
+            document.addEventListener('workflowstagechange', (event) => {
+                workflowStageFilter = event.detail.stage;
+                workflowStageTitle = event.detail.title;
+                if (!data.some((department) => matchesWorkflowStage(department) && department.id === Number(departmentFilter.value))) {
+                    departmentFilter.value = '';
+                }
+                const available = data.find(matchesWorkflowStage);
+                activeDepartmentId = available?.id ?? 0;
+                refresh(true);
+            });
+
+            chart.addEventListener('click', (event) => {
+                const group = event.target.closest('.chart-group');
+                if (group) selectDepartment(Number(group.dataset.departmentId));
+            });
+            chart.addEventListener('keydown', (event) => {
+                const group = event.target.closest('.chart-group');
+                if (group && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    selectDepartment(Number(group.dataset.departmentId));
+                }
+            });
+            chart.addEventListener('pointerover', (event) => {
+                const bar = event.target.closest('.chart-bar');
+                if (bar) setTooltip(bar, event);
+            });
+            chart.addEventListener('pointermove', (event) => {
+                const bar = event.target.closest('.chart-bar');
+                if (bar) setTooltip(bar, event);
+            });
+            chart.addEventListener('pointerout', (event) => {
+                if (event.target.closest('.chart-bar') && !event.relatedTarget?.closest?.('.chart-bar')) hideTooltip();
+            });
+
+            const showSlice = (slice) => {
+                const total = Number(donut.dataset.total);
+                const amount = Number(slice.dataset.amount);
+                donutTotal.textContent = moneyFormat.format(amount);
+                donutCaption.textContent = `${slice.dataset.category} · ${total ? percentFormat.format(amount / total * 100) : '0.0'}%`;
+            };
+            const resetSlice = () => {
+                const department = departmentById.get(activeDepartmentId);
+                const selectedCategory = categoryFilter.value;
+                const total = department?.categories
+                    .filter((category) => !selectedCategory || category.name === selectedCategory)
+                    .reduce((sum, category) => sum + category.plan, 0) ?? 0;
+                donutTotal.textContent = moneyFormat.format(total);
+                donutCaption.textContent = '合计 · 元';
+            };
+            donut.addEventListener('pointerover', (event) => {
+                const slice = event.target.closest('.donut-slice');
+                if (slice) showSlice(slice);
+            });
+            donut.addEventListener('pointerout', (event) => {
+                if (event.target.closest('.donut-slice') && !event.relatedTarget?.closest?.('.donut-slice')) resetSlice();
+            });
+            donut.addEventListener('focusin', (event) => {
+                const slice = event.target.closest('.donut-slice');
+                if (slice) showSlice(slice);
+            });
+            donut.addEventListener('focusout', (event) => {
+                if (event.target.closest('.donut-slice')) resetSlice();
+            });
+
+            document.querySelectorAll('.metric-value').forEach((element) => {
+                if (reducedMotion || element.dataset.isNull === 'true') return;
+                const target = Number(element.dataset.countValue);
+                const start = performance.now();
+                const isRate = element.classList.contains('metric-rate');
+                const tick = (now) => {
+                    const progress = Math.min(1, (now - start) / 600);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const value = target * eased;
+                    element.textContent = isRate ? `${percentFormat.format(value * 100)}%` : moneyFormat.format(value);
+                    if (progress < 1) element._countFrame = requestAnimationFrame(tick);
+                };
+                element._countFrame = requestAnimationFrame(tick);
+            });
+
+            renderBars(false);
+            renderDonut();
+            if ('ResizeObserver' in window) {
+                const resizeObserver = new ResizeObserver(() => renderBars(false));
+                resizeObserver.observe(document.querySelector('.chart-scroll'));
+            } else {
+                window.addEventListener('resize', () => renderBars(false));
+            }
+            setTimeout(() => dashboard.classList.add('charts-ready'), 900);
+        })();
+    </script>
+}

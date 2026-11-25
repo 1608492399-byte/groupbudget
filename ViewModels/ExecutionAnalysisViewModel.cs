@@ -7,6 +7,8 @@ public class ExecutionAnalysisViewModel
 {
     public BudgetBatch? Batch { get; set; }
 
+    public WorkflowSliderViewModel Workflow { get; set; } = new();
+
     public decimal BudgetTotal { get; set; }
 
     /// <summary>2026 决算合计：集团口径，取实际发生数明细全量（含各部门人员费用）。</summary>
@@ -74,6 +76,10 @@ public class ExecutionAnalysisViewModel
 
     public List<ExecutionRow> Categories { get; set; } = new();
 
+    public List<DepartmentChartData> ChartDepartments { get; set; } = new();
+
+    public string InsightSummary { get; set; } = "暂无足够数据生成分析摘要。";
+
     /// <summary>按增减额绝对值排序的前若干个科目。</summary>
     public List<ExecutionRow> TopSubjects { get; set; } = new();
 
@@ -99,6 +105,25 @@ public class ExecutionAnalysisViewModel
 
     public static decimal? Ratio(decimal numerator, decimal denominator)
         => denominator == 0m ? null : numerator / denominator;
+}
+
+public class DepartmentChartData
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string WorkflowStatus { get; set; } = string.Empty;
+    public decimal Budget { get; set; }
+    public decimal Actual { get; set; }
+    public decimal Plan { get; set; }
+    public List<CategoryChartData> Categories { get; set; } = new();
+}
+
+public class CategoryChartData
+{
+    public string Name { get; set; } = string.Empty;
+    public decimal Budget { get; set; }
+    public decimal Actual { get; set; }
+    public decimal Plan { get; set; }
 }
 
 public class ExecutionRow
