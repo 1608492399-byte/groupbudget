@@ -1,0 +1,129 @@
+/* ==========================================================================
+   动效层（表现层，零业务耦合）
+   只负责「进场 / 计数 / 进度展开 / 悬停 / 按压」五类微动效。
+   1. 全站受 prefers-reduced-motion 保护，系统开启「减少动态效果」时一切静止。
+   2. 隐藏初始态挂在 html.motion-ready 上，由 motion.js 负责加类与超时兜底：
+      脚本没加载成功，内容不会被永久藏起来。
+   3. 不改任何版面尺寸，只在 transform / opacity / background 上做手脚。
+   ========================================================================== */
+
+:root {
+  --ease-soft: cubic-bezier(.16, 1, .3, 1);
+  --ease-quick: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* ---------------------------- 页面进场 ---------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  body > .container-fluid > main {
+    animation: gb-page-enter .34s var(--ease-soft) both;
+  }
+}
+
+@keyframes gb-page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------------------------- 逐项入场 ---------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  html.motion-ready [data-reveal] {
+    opacity: 0;
+    transform: translateY(10px);
+    will-change: opacity, transform;
+  }
+
+  html.motion-ready [data-reveal="flat"] {
+    transform: none;
+  }
+
+  html.motion-ready [data-reveal].is-in {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity .46s var(--ease-soft),
+      transform .52s var(--ease-soft);
+    transition-delay: calc(var(--reveal-i, 0) * 55ms);
+    will-change: auto;
+  }
+}
+
+/* ---------------------------- 数字滚动 ---------------------------- */
+
+/* 计数过程中锁住字宽，避免每帧重排导致数字左右抖 */
+[data-countup] {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  min-width: 1ch;
+}
+
+/* ---------------------------- 进度条展开 ---------------------------- */
+
+.ticket .meter i {
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ticket .meter i {
+    animation: gb-meter-unfold .9s var(--ease-soft) .22s both;
+  }
+}
+
+@keyframes gb-meter-unfold {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* ---------------------------- 悬停抬升 ---------------------------- */
+
+.metric {
+  transition: background-color .2s ease;
+}
+
+.metric:hover {
+  background: #fbfcfd;
+}
+
+.kpi,
+.entry,
+.viz-card {
+  transition:
+    transform .2s var(--ease-quick),
+    box-shadow .22s ease,
+    border-color .18s ease;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .kpi:hover,
+  .viz-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 32px -28px rgba(16, 24, 40, .5);
+  }
+}
+
+/* ---------------------------- 按压反馈 ---------------------------- */
+
+.btn-ink,
+.btn-line,
+.btn-quiet,
+.viz-btn,
+.unit-btn {
+  transition: transform .1s ease;
+}
+
+.btn-ink:active,
+.btn-line:active,
+.btn-quiet:active,
+.viz-btn:active,
+.unit-btn:active {
+  transform: translateY(1px) scale(.995);
+}
+
+/* ---------------------------- 表格行轻移 ---------------------------- */
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .viz-table tbody tr {
+    transition: background-color .16s ease;
+  }
+}

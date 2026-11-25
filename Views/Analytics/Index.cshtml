@@ -74,29 +74,29 @@
     else
     {
         <!-- ================= 文字总结（置于图表之前） ================= -->
-        <section class="insight-summary insight-lead" aria-live="polite" aria-atomic="true">
+        <section class="insight-summary insight-lead" aria-live="polite" aria-atomic="true" data-reveal>
             <span class="insight-label">数据摘要</span>
             <p>@Model.InsightSummary</p>
         </section>
 
         <!-- ================= KPI ================= -->
-        <section class="viz-kpi" aria-label="关键指标">
-            <div class="kpi">
+        <section class="viz-kpi" aria-label="关键指标" data-stagger>
+            <div class="kpi" data-reveal>
                 <div class="k metric-label">@batch.BaselineYear 年预算</div>
                 <div class="v"><span class="metric-value" data-yuan="@Model.BudgetTotal.ToString(inv)">@money(Model.BudgetTotal)</span><small data-unit-label>元</small></div>
                 <div class="note">基准预算 · 不含总裁办</div>
             </div>
-            <div class="kpi">
+            <div class="kpi" data-reveal>
                 <div class="k metric-label">@batch.BaselineYear 年决算</div>
                 <div class="v"><span class="metric-value" data-yuan="@Model.ActualTotal.ToString(inv)">@money(Model.ActualTotal)</span><small data-unit-label>元</small></div>
                 <div class="note">实际发生数 · 含总裁办</div>
             </div>
-            <div class="kpi">
+            <div class="kpi" data-reveal>
                 <div class="k metric-label">@batch.PlanYear 年预算</div>
                 <div class="v"><span class="metric-value" data-yuan="@Model.PlanTotal.ToString(inv)">@money(Model.PlanTotal)</span><small data-unit-label>元</small></div>
                 <div class="note">部门填报合计</div>
             </div>
-            <div class="kpi">
+            <div class="kpi" data-reveal>
                 <div class="k metric-label">@batch.BaselineYear 年执行率</div>
                 <div class="v"><span class="metric-value metric-rate">@pct(Model.ExecRate)</span></div>
                 <div class="note">决算 ÷ 预算，未年化</div>
@@ -104,7 +104,7 @@
         </section>
 
         <!-- ================= 部门预算对照：仅本年预算与次年预算 ================= -->
-        <section class="viz-card" aria-labelledby="department-chart-title">
+        <section class="viz-card" data-reveal aria-labelledby="department-chart-title">
             <div class="viz-card-head">
                 <div>
                     <h2 id="department-chart-title">@batch.BaselineYear 与 @batch.PlanYear 年预算对照</h2>
@@ -175,7 +175,7 @@
 
         <!-- ================= 饼图 + 预算科目对照 ================= -->
         <div class="chart-grid">
-            <section class="viz-card" aria-labelledby="pie-title">
+            <section class="viz-card" data-reveal aria-labelledby="pie-title">
                 <div class="viz-card-head">
                     <div>
                         <h2 id="pie-title">@batch.BaselineYear 年@(Model.PieBasis)构成</h2>
@@ -227,7 +227,7 @@
                 </div>
             </section>
 
-            <section class="viz-card" aria-labelledby="subject-table-title">
+            <section class="viz-card" data-reveal aria-labelledby="subject-table-title">
                 <div class="viz-card-head">
                     <div>
                         <h2 id="subject-table-title">预算科目对照</h2>
@@ -279,7 +279,7 @@
         </div>
 
         <!-- ================= 部门执行率 ================= -->
-        <section class="viz-card">
+        <section class="viz-card" data-reveal>
             <div class="viz-card-head">
                 <div>
                     <h2>部门预算执行率</h2>
@@ -339,6 +339,7 @@
 
             const apply = (unit) => {
                 const divide = unit === 'wan' ? 10000 : 1;
+                window.gbCountUp && window.gbCountUp.stopAll();
                 document.querySelectorAll('[data-yuan]').forEach((el) => {
                     const value = Number(el.dataset.yuan);
                     if (!Number.isFinite(value)) return;
@@ -353,11 +354,27 @@
                 try { localStorage.setItem('gb-amount-unit', unit); } catch { /* 隐私模式下忽略 */ }
             };
 
+            // 首屏让 KPI 金额从 0 滚上去；单位切换时只做瞬时换算，不再重播，避免数字跳回 0
+            const playKpiCountUp = (divide) => {
+                if (!window.gbCountUp) return;
+                document.querySelectorAll('.kpi .metric-value[data-yuan]').forEach((el, i) => {
+                    const value = Number(el.dataset.yuan);
+                    if (!Number.isFinite(value)) return;
+                    window.gbCountUp.play(el, value / divide, {
+                        digits: 2,
+                        duration: 1000,
+                        delay: i * 90,
+                        format: (n) => fmt.format(n)
+                    });
+                });
+            };
+
             buttons.forEach((btn) => btn.addEventListener('click', () => apply(btn.dataset.unit)));
 
             let saved = 'yuan';
             try { saved = localStorage.getItem('gb-amount-unit') || 'yuan'; } catch { /* 忽略 */ }
             if (saved === 'wan') apply('wan');
+            playKpiCountUp(saved === 'wan' ? 10000 : 1);
         })();
     </script>
 }

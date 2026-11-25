@@ -8,11 +8,20 @@
         document.documentElement.classList.add('js-enabled');
         if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
         window.addEventListener('pageshow', () => window.scrollTo(0, 0), { once: true });
+        // 动效层：系统开了「减少动态效果」就不上初始隐藏态，内容直接可见
+        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            document.documentElement.classList.add('motion-ready');
+        }
+        // 兜底：motion.js 没跑起来就把隐藏态摘掉，绝不把内容藏死
+        setTimeout(function () {
+            if (!window.__gbMotion) document.documentElement.classList.remove('motion-ready');
+        }, 2600);
     </script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/brand.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/viz.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/motion.css" asp-append-version="true" />
 </head>
 <body class="@ViewData["BodyClass"]">
     @{
@@ -126,6 +135,7 @@
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/motion.js" asp-append-version="true"></script>
     <script>
         (() => {
             const rail = document.getElementById('quickrail');
