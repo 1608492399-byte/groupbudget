@@ -87,25 +87,18 @@ public class AnalyticsController : AppControllerBase
 
         // 集团口径的决算取「实际发生数」明细全量：基准表里人员费用已归口人事部，
         // 直接汇总基准会让集团合计少掉其他部门的人员费用（约 1,234 万），执行率严重偏低。
-        // 明细先按 ActualCaliber 过滤（辞退福利等 431,332.78 元不计入），与源表 S98 逐分对齐。
-        var rawDetails = await Db.ActualDetails
+        // 口径不做任何剔除（见 Services/ActualCaliber.cs）：辞退福利计入基本工资、广告制作费计入广告费，
+        // 集团合计 30,296,124.89 元。
+        var actualDetails = await Db.ActualDetails
             .Where(a => a.BudgetBatchId == batch.Id && a.SubjectId != null)
             .Select(a => new
             {
                 a.OrganizationId,
                 a.SubjectId,
                 a.ExpenseType,
-                a.AccountAmount,
-                a.AccountingSubjectName
+                a.AccountAmount
             })
             .ToListAsync();
-
-        var actualDetails = rawDetails
-            .Where(a => !ActualCaliber.IsExcluded(
-                subjectMap.GetValueOrDefault(a.SubjectId!.Value)?.Name,
-                a.AccountingSubjectName,
-                a.AccountAmount))
-            .ToList();
 
         const string ProjectType = "项目支出";
 

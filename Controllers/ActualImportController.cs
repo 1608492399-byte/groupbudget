@@ -354,17 +354,8 @@ public class ActualImportController : AppControllerBase
 
             // 实际账务的「部门 × 科目」可能超出预算填报的科目范围（例如各部门账上都有工资、社保），
             // 遇到缺失的基准记录时自动补建（2026 预算数为 0），避免整批导入因缺行而回滚。
-            // 汇总基准前先按 ActualCaliber 剔除口径外凭证（辞退福利等），
-            // 否则每次重新导入都会把 431,332.78 元带回基准表，集团合计又和源表对不上。
-            var subjectNameById = await Db.Subjects
-                .Select(x => new { x.Id, x.Name })
-                .ToDictionaryAsync(x => x.Id, x => x.Name);
-
+            // 口径为明细全量，不剔除任何凭证；辞退福利、广告制作费的科目归属由映射表决定。
             var groups = preview.Rows
-                .Where(x => !ActualCaliber.IsExcluded(
-                    subjectNameById.GetValueOrDefault(x.SubjectId),
-                    x.AccountingSubjectName,
-                    x.ApprovedAmount))
                 .GroupBy(x => (x.OrganizationId, x.SubjectId, x.ExpenseType))
                 .ToList();
             foreach (var group in groups)
