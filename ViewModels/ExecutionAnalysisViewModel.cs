@@ -165,6 +165,9 @@ public class ExecutionRow
     /// <summary>附加说明，例如费用类别；无值时不显示。</summary>
     public string? Note { get; set; }
 
+    /// <summary>预算科目备注，取自源表《部门支出预算执行总表》的「说明」列；无备注时为 null。</summary>
+    public string? Remark { get; set; }
+
     public decimal Budget { get; set; }
     public decimal Actual { get; set; }
     public decimal Plan { get; set; }

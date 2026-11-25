@@ -231,7 +231,7 @@
                 <div class="viz-card-head">
                     <div>
                         <h2 id="subject-table-title">预算科目对照</h2>
-                        <div class="hint">按 @batch.BaselineYear 年决算由高到低排序，共 @Model.Subjects.Count 个科目</div>
+                        <div class="hint">按 @batch.BaselineYear 年决算由高到低排序，共 @Model.Subjects.Count 个科目；备注取自《部门支出预算执行总表》说明列</div>
                     </div>
                 </div>
                 <div class="viz-table-wrap viz-table-scroll">
@@ -244,6 +244,7 @@
                                 <th>执行率</th>
                                 <th>@batch.PlanYear 预算</th>
                                 <th>增减比例</th>
+                                <th class="remark-h">备注</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -256,6 +257,7 @@
                                     <td class="@(s.ExecRate > 1m ? "up" : "")">@pct(s.ExecRate)</td>
                                     <td class="num" data-yuan="@s.Plan.ToString(inv)">@money(s.Plan)</td>
                                     <td class="@changeClass(s.ChangeRate)">@pctSigned(s.ChangeRate)</td>
+                                    <td class="remark">@(string.IsNullOrWhiteSpace(s.Remark) ? "—" : s.Remark)</td>
                                 </tr>
                             }
                         </tbody>
@@ -267,6 +269,7 @@
                                 <td>@pct(Model.ExecRate)</td>
                                 <td class="num" data-yuan="@Model.PlanTotal.ToString(inv)">@money(Model.PlanTotal)</td>
                                 <td class="@changeClass(Model.PlanChangeRate)">@pctSigned(Model.PlanChangeRate)</td>
+                                <td class="remark"></td>
                             </tr>
                         </tfoot>
                     </table>

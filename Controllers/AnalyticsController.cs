@@ -176,6 +176,7 @@ public class AnalyticsController : AppControllerBase
             {
                 Name = subject.Name,
                 Note = subject.Category,
+                Remark = SubjectRemarks.Get(subject.Name),
                 Budget = budget,
                 Actual = actual,
                 Plan = plan,

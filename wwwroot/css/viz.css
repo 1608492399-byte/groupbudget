@@ -950,6 +950,33 @@ html:not(.js-enabled) .donut-slice {
   font-size: 11.5px;
 }
 
+/* 备注列：承接源表「说明」列，允许换行，数字列不受影响 */
+.viz-table th.remark-h,
+.viz-table td.remark {
+  text-align: left;
+  white-space: normal;
+  min-width: 200px;
+  width: 30%;
+  max-width: 340px;
+  line-height: 1.55;
+  letter-spacing: 0;
+}
+
+.viz-table th.remark-h {
+  color: var(--ink-4);
+}
+
+.viz-table td.remark {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-variant-numeric: normal;
+}
+
+.viz-table tfoot td.remark {
+  color: var(--ink-4);
+  font-weight: 400;
+}
+
 .viz-table tfoot td {
   border-top: 1px solid var(--line-2);
   border-bottom: 0;
@@ -1296,8 +1323,16 @@ html:not(.js-enabled) .donut-slice {
 }
 
 .viz-table-scroll {
-  max-height: 430px;
+  max-height: 560px;
   overflow-y: auto;
+}
+
+/* 表长时表头跟随滚动，避免翻到中段看不到列名 */
+.viz-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper);
 }
 
 .inline-amount {
