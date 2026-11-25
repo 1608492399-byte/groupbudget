@@ -94,6 +94,9 @@ public class ExecutionAnalysisViewModel
     /// <summary>被排除部门（总裁办）的决算金额：计入集团合计，但不作为部门行显示。</summary>
     public decimal ExcludedActualTotal { get; set; }
 
+    /// <summary>决算口径说明：说明本页合计与原始凭证明细的差异，页面脚注显示。</summary>
+    public string CaliberNote { get; set; } = string.Empty;
+
     public List<DepartmentChartData> ChartDepartments { get; set; } = new();
 
     public string InsightSummary { get; set; } = "暂无足够数据生成分析摘要。";

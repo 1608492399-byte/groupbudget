@@ -40,6 +40,8 @@
 }
 
 .chart-axis-label {
+  font-size: 11px;
+  fill: #646e78;
   transition: opacity .09s ease-out;
 }
 

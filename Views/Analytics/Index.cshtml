@@ -15,7 +15,7 @@
     // —— 柱状图几何：仅两个系列（本年预算 / 次年预算） ——
     var depts = Model.ChartDepartments;
     var chartWidth = 1120m;
-    var chartLeft = 78m;
+    var chartLeft = 104m;
     var chartRight = 1092m;
     var chartTop = 30m;
     var chartBaseline = 344m;
@@ -314,7 +314,7 @@
         </section>
 
         <div class="viz-foot">
-            <div><b>口径</b>：决算取「实际发生数」明细全量 @money(Model.ActualTotal) 元；人员费用按预算归属统一计入人事部。</div>
+            <div><b>口径</b>：决算 @money(Model.ActualTotal) 元。@Model.CaliberNote 人员费用按预算归属统一计入人事部。</div>
             <div><b>执行率</b> ＝ @batch.BaselineYear 年决算 ÷ @batch.BaselineYear 年预算；决算为 1–10 月实际发生数，未按 12 个月年化。</div>
             <div><b>增减比例</b> ＝（@batch.PlanYear 年预算 − @batch.BaselineYear 年决算）÷ @batch.BaselineYear 年决算。</div>
             @if (Model.ExcludedDepartments.Count > 0)
