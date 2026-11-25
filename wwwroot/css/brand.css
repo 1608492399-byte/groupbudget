@@ -138,9 +138,6 @@ body.home-body footer.footer > .container-fluid {
   text-wrap: balance;
 }
 
-  .hero > :first-child,
-  .hero > aside { grid-column: 1 / -1; }
-
 .hero h1 .thin {
   color: var(--ink-display);
   font-weight: 400;

@@ -1,4 +1,4 @@
-using GroupBudget.Models;
+﻿using GroupBudget.Models;
 
 namespace GroupBudget.ViewModels;
 
@@ -76,6 +76,24 @@ public class ExecutionAnalysisViewModel
 
     public List<ExecutionRow> Categories { get; set; } = new();
 
+    /// <summary>按「预算科目」汇总的执行与增减，取代原先按费用类别的口径。</summary>
+    public List<ExecutionRow> Subjects { get; set; } = new();
+
+    /// <summary>饼图切片（按预算科目），占比过小的已并入「其他科目」。</summary>
+    public List<PieSlice> PieSlices { get; set; } = new();
+
+    /// <summary>饼图合计。</summary>
+    public decimal PieTotal { get; set; }
+
+    /// <summary>饼图口径：决算 / 预算。决算尚未归集时退回预算口径。</summary>
+    public string PieBasis { get; set; } = "决算";
+
+    /// <summary>本页排除在外的部门名称（总裁办），用于页面脚注说明。</summary>
+    public List<string> ExcludedDepartments { get; set; } = new();
+
+    /// <summary>被排除部门（总裁办）的决算金额：计入集团合计，但不作为部门行显示。</summary>
+    public decimal ExcludedActualTotal { get; set; }
+
     public List<DepartmentChartData> ChartDepartments { get; set; } = new();
 
     public string InsightSummary { get; set; } = "暂无足够数据生成分析摘要。";
@@ -124,6 +142,17 @@ public class CategoryChartData
     public decimal Budget { get; set; }
     public decimal Actual { get; set; }
     public decimal Plan { get; set; }
+}
+
+/// <summary>饼图切片：一个预算科目的金额与占比。</summary>
+public class PieSlice
+{
+    public string Name { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal? Share { get; set; }
+
+    /// <summary>是否为「其他科目」汇总项。</summary>
+    public bool IsOther { get; set; }
 }
 
 public class ExecutionRow

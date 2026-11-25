@@ -1,15 +1,15 @@
-@model GroupBudget.ViewModels.WorkflowSliderViewModel
+﻿@model GroupBudget.ViewModels.WorkflowSliderViewModel
 <section class="panel" id="flow">
     <div class="panel-head">
-        <h2>��������</h2>
-        <span>��Ȼ��� �� һ��һ�� �� ȫ������</span>
+        <h2>报送流程</h2>
+        <span>自然年度 · 一年一报 · 全程留痕</span>
     </div>
     <div class="flow-summary">
-        <span class="flow-current-label">��ǰ�׶�</span>
+        <span class="flow-current-label">当前阶段</span>
         <strong id="workflow-current-title">@Model.Stages[Model.CurrentStage].Title</strong>
         <span class="flow-summary-meta">@Model.Summary</span>
     </div>
-    <div class="workflow-viewport" id="workflow-viewport" role="region" aria-label="�������̽׶�" tabindex="0">
+    <div class="workflow-viewport" id="workflow-viewport" role="region" aria-label="报送流程阶段" tabindex="0">
         <div class="workflow-visual" id="workflow-slider" data-stage="@Model.CurrentStage">
             <svg class="workflow-rail" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
                 <path class="workflow-rail-base rail-1" d="M100 20 H300" />
@@ -22,7 +22,7 @@
                     <circle class="workflow-rail-node @(index == Model.CurrentStage ? "is-active" : "")" data-stage="@index" cx="@(100 + index * 200)" cy="20" r="5" />
                 }
             </svg>
-            <ol class="workflow" aria-label="Ԥ�㱨�͹�����">
+            <ol class="workflow" aria-label="预算报送流程">
                 @for (var index = 0; index < Model.Stages.Count; index++)
                 {
                     var stage = Model.Stages[index];
@@ -190,8 +190,9 @@
         }, { passive: false });
         viewport.addEventListener('pointerdown', (event) => {
             if (event.pointerType !== 'mouse' || event.button !== 0) return;
-            dragStart = { x: event.clientX, scroll: viewport.scrollLeft, moved: false };
-            viewport.setPointerCapture(event.pointerId);
+            // 这里不调用 setPointerCapture：一旦捕获，click 就落到 viewport 上，
+            // 节点自身的 click 永远不触发（只剩滚轮能用）。改到确实发生拖动时再捕获。
+            dragStart = { x: event.clientX, scroll: viewport.scrollLeft, moved: false, pointerId: event.pointerId };
         });
         viewport.addEventListener('pointermove', (event) => {
             if (!dragStart) return;
@@ -200,6 +201,10 @@
             if (dragStart.moved) {
                 suppressClick = true;
                 event.preventDefault();
+                if (!dragStart.captured) {
+                    dragStart.captured = true;
+                    try { viewport.setPointerCapture(dragStart.pointerId); } catch { /* 忽略：浏览器不支持时退化为普通拖动 */ }
+                }
                 viewport.scrollLeft = dragStart.scroll - delta;
             }
         });
