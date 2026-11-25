@@ -1,4 +1,5 @@
 ﻿@model GroupBudget.ViewModels.HomeDashboardViewModel
+@model GroupBudget.ViewModels.HomeDashboardViewModel
 @{
     ViewData["Title"] = "首页";
     ViewData["BodyClass"] = "home-body";
@@ -10,13 +11,25 @@
     var identityLine = Model.IsAuthenticated
         ? $"{Model.RoleName} · {(string.IsNullOrEmpty(Model.OrganizationName) ? "集团总部" : Model.OrganizationName)}"
         : "尚未登录 · 仅可查看概览";
+    var flowCurrentStage = batch == null || batch.Status == BatchStatus.Draft ? 0
+        : batch.Status == BatchStatus.Archived ? 4
+        : Model.PendingCount > 0 ? 2
+        : Model.FormApproved + Model.FormReturned > 0 ? 3
+        : 1;
+    var flowStages = new[]
+    {
+        new { Title = "草稿", Meta = $"{Model.FormDraft} 单待完善", Detail = "填报员在本部门工作区编制预算。草稿可持续修改，金额变动由系统计算。" },
+        new { Title = "提交", Meta = $"{Model.FormSubmitted + Model.FormApproved + Model.FormReturned} / {Model.FormTotal} 单已提交", Detail = "填报完成后提交，系统记录版本与提交时间；超过偏差阈值时需填写说明。" },
+        new { Title = "集团审核", Meta = $"{Model.PendingCount} 单待审核", Detail = "集团审核员核对部门预算与基准数据，可通过或退回并填写审核意见。" },
+        new { Title = "审核结果", Meta = $"通过 {Model.FormApproved} · 退回 {Model.FormReturned}", Detail = "审核通过后进入归档准备；退回单据可按意见修订后重新提交。" },
+        new { Title = "归档", Meta = batch?.Status == BatchStatus.Archived ? "批次已归档" : "等待批次归档", Detail = "批次归档后，相关预算版本与审核记录保留，汇总数据可供导出与追溯。" }
+    };
 }
 
 <div class="home-page">
 
     <section class="hero">
         <div>
-            <p class="eyebrow">集团财务 · 年度预算编制</p>
             <h1>
                 预决算上报<br />
                 <span class="thin">与审核系统</span>
@@ -54,7 +67,7 @@
                         集团审核
                         @if (Model.PendingCount > 0)
                         {
-                            <span class="pill pill-live" style="height:19px;padding:0 7px;font-size:11px;">@Model.PendingCount</span>
+                            <span class="pill pill-live pill-sm">@Model.PendingCount</span>
                         }
                     </a>
                     <a class="btn-quiet" asp-controller="Export" asp-action="Index">导出汇总</a>
@@ -210,7 +223,7 @@
                     <span class="go"><b>去导出</b></span>
                 </a>
 
-                @if (Model.IsAdmin)
+                if (Model.IsAdmin)
                 {
                     <a class="entry" asp-controller="Analytics" asp-action="Index">
                         <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg></span>
@@ -246,28 +259,67 @@
             <h2>报送流程</h2>
             <span>自然年度 · 一年一报 · 全程留痕</span>
         </div>
-        <ol class="steps">
-            <li>
-                <div class="st">录入基准</div>
-                <div class="sd">管理员导入本年预算与决算，形成只读基准数据。</div>
-            </li>
-            <li>
-                <div class="st">下发锁定</div>
-                <div class="sd">生成版本快照并下发，部门仅见本部门适用科目。</div>
-            </li>
-            <li>
-                <div class="st">部门填报</div>
-                <div class="sd">一行一科目填次年预算，服务端实时算增减与增幅。</div>
-            </li>
-            <li>
-                <div class="st">提交审核</div>
-                <div class="sd">偏差超阈值必须填写原因，提交后单据立即锁定。</div>
-            </li>
-            <li>
-                <div class="st">审核归档</div>
-                <div class="sd">通过或打回留版本，最终导出集团汇总表归档。</div>
-            </li>
+        <div class="flow-summary">
+            <span class="flow-current-label">当前阶段</span>
+            <strong>@flowStages[flowCurrentStage].Title</strong>
+            <span class="flow-summary-meta">@(batch == null ? "等待管理员创建批次" : $"{Model.FormTotal} 个填报单 · 进度 {Model.ProgressPercent}%")</span>
+        </div>
+        <div class="flow-progress" role="progressbar" aria-label="部门报送进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Model.ProgressPercent" aria-valuetext="@($"{Model.ProgressPercent}% 已提交或完成")">
+            <span class="flow-progress-track" aria-hidden="true"><i style="width:@(Model.ProgressPercent)%"></i></span>
+            <span class="flow-progress-value">@Model.ProgressPercent%</span>
+        </div>
+        <ol class="workflow" aria-label="预算报送工作流">
+            @for (var i = 0; i < flowStages.Length; i++)
+            {
+                var stage = flowStages[i];
+                <li class="workflow-item">
+                    <button type="button" class="workflow-step @(i == flowCurrentStage ? "is-current is-selected" : "")"
+                            data-title="@stage.Title" data-meta="@stage.Meta" data-detail="@stage.Detail"
+                            aria-pressed="@(i == flowCurrentStage ? "true" : "false")" @(i == flowCurrentStage ? "aria-current=step" : null)>
+                        <span class="workflow-index">0@(i + 1)</span>
+                        <span class="workflow-title">@stage.Title</span>
+                        <span class="workflow-meta">@stage.Meta</span>
+                        @if (i == flowCurrentStage)
+                        {
+                            <span class="workflow-now">当前</span>
+                        }
+                        @if (i == 3)
+                        {
+                            <span class="workflow-branches"><span>通过 @Model.FormApproved</span><span>退回 @Model.FormReturned</span></span>
+                        }
+                    </button>
+                </li>
+            }
         </ol>
+        <div class="workflow-detail" id="workflow-detail" aria-live="polite" aria-atomic="true">
+            <span class="workflow-detail-kicker" id="workflow-detail-title">@flowStages[flowCurrentStage].Title</span>
+            <p id="workflow-detail-copy">@flowStages[flowCurrentStage].Detail</p>
+            <span class="workflow-detail-meta" id="workflow-detail-meta">@flowStages[flowCurrentStage].Meta</span>
+        </div>
     </section>
 
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const steps = document.querySelectorAll('.workflow-step');
+            const title = document.getElementById('workflow-detail-title');
+            const copy = document.getElementById('workflow-detail-copy');
+            const meta = document.getElementById('workflow-detail-meta');
+            steps.forEach((step) => {
+                step.addEventListener('click', () => {
+                    steps.forEach((item) => {
+                        item.classList.remove('is-selected');
+                        item.setAttribute('aria-pressed', 'false');
+                    });
+                    step.classList.add('is-selected');
+                    step.setAttribute('aria-pressed', 'true');
+                    title.textContent = step.dataset.title;
+                    copy.textContent = step.dataset.detail;
+                    meta.textContent = step.dataset.meta;
+                });
+            });
+        })();
+    </script>
+}
