@@ -1,5 +1,4 @@
 ﻿@model GroupBudget.ViewModels.HomeDashboardViewModel
-@model GroupBudget.ViewModels.HomeDashboardViewModel
 @{
     ViewData["Title"] = "首页";
     ViewData["BodyClass"] = "home-body";
@@ -21,7 +20,7 @@
         new { Title = "草稿", Meta = $"{Model.FormDraft} 单待完善", Detail = "填报员在本部门工作区编制预算。草稿可持续修改，金额变动由系统计算。" },
         new { Title = "提交", Meta = $"{Model.FormSubmitted + Model.FormApproved + Model.FormReturned} / {Model.FormTotal} 单已提交", Detail = "填报完成后提交，系统记录版本与提交时间；超过偏差阈值时需填写说明。" },
         new { Title = "集团审核", Meta = $"{Model.PendingCount} 单待审核", Detail = "集团审核员核对部门预算与基准数据，可通过或退回并填写审核意见。" },
-        new { Title = "审核结果", Meta = $"通过 {Model.FormApproved} · 退回 {Model.FormReturned}", Detail = "审核通过后进入归档准备；退回单据可按意见修订后重新提交。" },
+        new { Title = "通过 / 退回", Meta = $"通过 {Model.FormApproved} · 退回 {Model.FormReturned}", Detail = "审核通过后进入归档准备；退回单据可按意见修订后重新提交。" },
         new { Title = "归档", Meta = batch?.Status == BatchStatus.Archived ? "批次已归档" : "等待批次归档", Detail = "批次归档后，相关预算版本与审核记录保留，汇总数据可供导出与追溯。" }
     };
 }
@@ -223,7 +222,7 @@
                     <span class="go"><b>去导出</b></span>
                 </a>
 
-                if (Model.IsAdmin)
+                @if (Model.IsAdmin)
                 {
                     <a class="entry" asp-controller="Analytics" asp-action="Index">
                         <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg></span>
@@ -264,37 +263,40 @@
             <strong>@flowStages[flowCurrentStage].Title</strong>
             <span class="flow-summary-meta">@(batch == null ? "等待管理员创建批次" : $"{Model.FormTotal} 个填报单 · 进度 {Model.ProgressPercent}%")</span>
         </div>
-        <div class="flow-progress" role="progressbar" aria-label="部门报送进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Model.ProgressPercent" aria-valuetext="@($"{Model.ProgressPercent}% 已提交或完成")">
-            <span class="flow-progress-track" aria-hidden="true"><i style="width:@(Model.ProgressPercent)%"></i></span>
-            <span class="flow-progress-value">@Model.ProgressPercent%</span>
-        </div>
-        <ol class="workflow" aria-label="预算报送工作流">
-            @for (var i = 0; i < flowStages.Length; i++)
-            {
-                var stage = flowStages[i];
-                <li class="workflow-item">
-                    <button type="button" class="workflow-step @(i == flowCurrentStage ? "is-current is-selected" : "")"
-                            data-title="@stage.Title" data-meta="@stage.Meta" data-detail="@stage.Detail"
-                            aria-pressed="@(i == flowCurrentStage ? "true" : "false")" @(i == flowCurrentStage ? "aria-current=step" : null)>
-                        <span class="workflow-index">0@(i + 1)</span>
-                        <span class="workflow-title">@stage.Title</span>
-                        <span class="workflow-meta">@stage.Meta</span>
-                        @if (i == flowCurrentStage)
-                        {
-                            <span class="workflow-now">当前</span>
-                        }
-                        @if (i == 3)
-                        {
-                            <span class="workflow-branches"><span>通过 @Model.FormApproved</span><span>退回 @Model.FormReturned</span></span>
-                        }
-                    </button>
-                </li>
-            }
-        </ol>
-        <div class="workflow-detail" id="workflow-detail" aria-live="polite" aria-atomic="true">
-            <span class="workflow-detail-kicker" id="workflow-detail-title">@flowStages[flowCurrentStage].Title</span>
-            <p id="workflow-detail-copy">@flowStages[flowCurrentStage].Detail</p>
-            <span class="workflow-detail-meta" id="workflow-detail-meta">@flowStages[flowCurrentStage].Meta</span>
+        <div class="workflow-visual">
+            <svg class="workflow-rail" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                <path class="workflow-rail-base rail-1" d="M100 20 H300" />
+                <path class="workflow-rail-base rail-2" d="M300 20 H500" />
+                <path class="workflow-rail-base rail-3" d="M500 20 H700" />
+                <path class="workflow-rail-base rail-4" d="M700 20 H900" />
+                <path class="workflow-rail-progress" d="M100 20 H900" pathLength="800" stroke-dasharray="800" stroke-dashoffset="@(800 - 200 * flowCurrentStage)" />
+                @for (var i = 0; i < flowStages.Length; i++)
+                {
+                    <circle class="workflow-rail-node @(i == flowCurrentStage ? "is-active" : "")" data-stage="@i" cx="@(100 + i * 200)" cy="20" r="5" />
+                }
+            </svg>
+            <ol class="workflow" aria-label="预算报送工作流">
+                @for (var i = 0; i < flowStages.Length; i++)
+                {
+                    var stage = flowStages[i];
+                    <li class="workflow-item @(i == flowCurrentStage ? "is-expanded" : "") @(i < flowCurrentStage ? "is-past" : "")">
+                        <button type="button" class="workflow-step" data-stage="@i" data-title="@stage.Title"
+                                aria-expanded="@(i == flowCurrentStage ? "true" : "false")"
+                                aria-controls="workflow-detail-@i" @(i == flowCurrentStage ? "aria-current=step" : null)>
+                            <span class="workflow-index" aria-hidden="true">0@(i + 1)</span>
+                            <span class="workflow-title">@stage.Title</span>
+                            <span class="workflow-extra" id="workflow-detail-@i" aria-hidden="@(i == flowCurrentStage ? "false" : "true")">
+                                <span class="workflow-meta">@stage.Meta</span>
+                                <span class="workflow-description">@stage.Detail</span>
+                                @if (i == 3)
+                                {
+                                    <span class="workflow-branches"><span>通过 @Model.FormApproved</span><span>退回 @Model.FormReturned</span></span>
+                                }
+                            </span>
+                        </button>
+                    </li>
+                }
+            </ol>
         </div>
     </section>
 
@@ -303,21 +305,38 @@
 @section Scripts {
     <script>
         (() => {
-            const steps = document.querySelectorAll('.workflow-step');
-            const title = document.getElementById('workflow-detail-title');
-            const copy = document.getElementById('workflow-detail-copy');
-            const meta = document.getElementById('workflow-detail-meta');
-            steps.forEach((step) => {
-                step.addEventListener('click', () => {
-                    steps.forEach((item) => {
-                        item.classList.remove('is-selected');
-                        item.setAttribute('aria-pressed', 'false');
-                    });
-                    step.classList.add('is-selected');
-                    step.setAttribute('aria-pressed', 'true');
-                    title.textContent = step.dataset.title;
-                    copy.textContent = step.dataset.detail;
-                    meta.textContent = step.dataset.meta;
+            const visual = document.querySelector('.workflow-visual');
+            const items = Array.from(document.querySelectorAll('.workflow-item'));
+            const steps = items.map((item) => item.querySelector('.workflow-step'));
+            const nodes = visual.querySelectorAll('.workflow-rail-node');
+            const progress = visual.querySelector('.workflow-rail-progress');
+            const select = (index) => {
+                items.forEach((item, itemIndex) => {
+                    const step = steps[itemIndex];
+                    const expanded = itemIndex === index;
+                    item.classList.toggle('is-expanded', expanded);
+                    item.classList.toggle('is-past', itemIndex < index);
+                    step.setAttribute('aria-expanded', String(expanded));
+                    step.querySelector('.workflow-extra').setAttribute('aria-hidden', String(!expanded));
+                    if (step.hasAttribute('aria-current')) step.removeAttribute('aria-current');
+                    if (expanded) step.setAttribute('aria-current', 'step');
+                });
+                nodes.forEach((node, nodeIndex) => node.classList.toggle('is-active', nodeIndex === index));
+                progress.style.strokeDashoffset = String(800 - 200 * index);
+            };
+
+            steps.forEach((step, index) => {
+                step.addEventListener('click', () => select(index));
+                step.addEventListener('keydown', (event) => {
+                    const direction = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1
+                        : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+                    if (direction) {
+                        event.preventDefault();
+                        steps[(index + direction + steps.length) % steps.length].focus();
+                    } else if (event.key === 'Home' || event.key === 'End') {
+                        event.preventDefault();
+                        steps[event.key === 'Home' ? 0 : steps.length - 1].focus();
+                    }
                 });
             });
         })();

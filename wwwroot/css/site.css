@@ -21,6 +21,26 @@ body {
   margin-bottom: 60px;
 }
 
+@keyframes app-route-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes app-route-enter-reduced {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+body main {
+  animation: app-route-enter .24s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body main {
+    animation: app-route-enter-reduced .1s ease-out both;
+  }
+}
+
 /* ==========================================================================
    预算填报表（Views/Filing/Edit.cshtml）
    作用域限定在 .sheet-page，不改动其他页面的 Bootstrap 默认外观。

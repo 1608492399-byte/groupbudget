@@ -35,7 +35,7 @@ public class HomeDashboardViewModel
     /// <summary>填报员本批次单据状态。</summary>
     public string? MyFormStatus { get; set; }
 
-    /// <summary>已提交 + 已通过 占全部单据的比例（0-100）。</summary>
+    /// <summary>已提交或已审核（通过/退回）的单据占比（0-100）。</summary>
     public int ProgressPercent
-        => FormTotal == 0 ? 0 : (int)Math.Round((FormSubmitted + FormApproved) * 100m / FormTotal);
+        => FormTotal == 0 ? 0 : (int)Math.Round((FormSubmitted + FormApproved + FormReturned) * 100m / FormTotal);
 }
