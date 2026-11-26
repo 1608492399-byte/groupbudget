@@ -135,18 +135,22 @@
         <div class="container-fluid px-4">
             内部系统 · 金额单位：元 · 所有操作留痕
             @{
+                // 容器（Vercel/Docker）里文件时间是 UTC，统一换算成北京时间再显示
                 var buildStamp = "—";
                 try
                 {
                     var loc = typeof(GroupBudget.Data.ApplicationDbContext).Assembly.Location;
                     if (!string.IsNullOrEmpty(loc) && System.IO.File.Exists(loc))
                     {
-                        buildStamp = System.IO.File.GetLastWriteTime(loc).ToString("yyyy-MM-dd HH:mm");
+                        var utc = System.IO.File.GetLastWriteTimeUtc(loc);
+                        buildStamp = new DateTimeOffset(utc, TimeSpan.Zero)
+                            .ToOffset(TimeSpan.FromHours(8))
+                            .ToString("yyyy-MM-dd HH:mm");
                     }
                 }
                 catch { /* 取不到就显示占位，不影响页面 */ }
             }
-            <span class="build-stamp" title="当前运行的程序构建时间">构建 @buildStamp</span>
+            <span class="build-stamp" title="当前运行的程序构建时间（北京时间）">构建 @buildStamp</span>
         </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
