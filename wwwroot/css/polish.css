@@ -1,0 +1,218 @@
+/* ==========================================================================
+   视觉打磨层（纯静态样式，不依赖任何动画设置）
+   思路：从「一整块白底 + 分割线」改成「暖纸底 + 独立卡片」，拉开层级。
+   1. 只覆盖颜色、圆角、阴影、间距，不改任何栅格列数与内容顺序。
+   2. 作用域限定 body.home-body（首页）与 body.viz-body（执行分析），
+      不碰填报页 .sheet-page、登录页 .auth-page 与其他 Bootstrap 表格页。
+   3. 数值与字号只放大不缩小，保证投影时后排可读。
+   ========================================================================== */
+
+/* ------------------------------- 首页 ------------------------------- */
+
+body.home-body {
+  --paper-warm: #f6f4ee;
+  --line-warm: #eae4d9;
+  --card-r: 18px;
+  --card-shadow: 0 1px 2px rgba(58, 48, 32, .04), 0 16px 36px -30px rgba(58, 48, 32, .5);
+
+  background: var(--paper-warm);
+}
+
+body.home-body .footer {
+  background: var(--paper-warm) !important;
+  border-color: var(--line-warm) !important;
+}
+
+body.home-body header .navbar {
+  background: var(--paper-warm) !important;
+  border-bottom-color: var(--line-warm) !important;
+}
+
+body.viz-body header .navbar {
+  background: var(--paper-warm) !important;
+}
+
+/* 主视觉：底部那条硬分割线换成更轻的暖色线 */
+.home-page .hero {
+  border-bottom-color: var(--line-warm);
+}
+
+/* 指标从「一格一格」改成「四张独立卡片」 */
+.home-page .metrics {
+  gap: 14px;
+  margin-top: 30px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.home-page .metric {
+  padding: 20px 22px 22px;
+  background: var(--paper);
+  border: 1px solid var(--line-warm);
+  border-radius: var(--card-r);
+  box-shadow: var(--card-shadow);
+}
+
+.home-page .metric + .metric {
+  border-left: 1px solid var(--line-warm);
+}
+
+.home-page .metric .v {
+  margin-top: 12px;
+  font-size: 30px;
+  letter-spacing: -.03em;
+}
+
+.home-page .metric .k {
+  color: var(--ink-3);
+  letter-spacing: .01em;
+}
+
+/* 压轴指标做深色强调卡：整页只留一个视觉重心 */
+.home-page .metric.metric-accent {
+  background: #14181d;
+  border-color: #14181d;
+  box-shadow: 0 18px 40px -28px rgba(20, 24, 29, .8);
+}
+
+.home-page .metric.metric-accent .k {
+  color: rgba(255, 255, 255, .62);
+}
+
+.home-page .metric.metric-accent .v {
+  color: #fff;
+}
+
+.home-page .metric.metric-accent .v small,
+.home-page .metric.metric-accent .note {
+  color: rgba(255, 255, 255, .58);
+}
+
+/* 批次卡与入口卡：统一圆角与阴影语言 */
+.home-page .ticket {
+  border-color: var(--line-warm);
+  border-radius: var(--card-r);
+  box-shadow: 0 1px 2px rgba(58, 48, 32, .05), 0 22px 48px -32px rgba(58, 48, 32, .55);
+}
+
+.home-page .entry {
+  border-color: var(--line-warm);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(58, 48, 32, .03), 0 14px 30px -28px rgba(58, 48, 32, .45);
+}
+
+.home-page .entry .ico {
+  background: #f4f1ea;
+}
+
+.home-page .panel-head {
+  border-bottom-color: var(--line-warm);
+}
+
+/* 小节标题加一道竖线，读完就知道层级到哪 */
+.home-page .panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-page .panel-head h2::before {
+  content: "";
+  width: 3px;
+  height: 17px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+
+/* ---------------------------- 执行分析 ---------------------------- */
+
+body.viz-body {
+  --paper-warm: #f6f4ee;
+  --line-warm: #eae4d9;
+
+  background: var(--paper-warm);
+}
+
+body.viz-body .footer {
+  background: var(--paper-warm) !important;
+  border-color: var(--line-warm) !important;
+}
+
+.viz-page .viz-kpi {
+  gap: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.viz-page .kpi {
+  padding: 20px 22px;
+  background: var(--paper);
+  border: 1px solid var(--line-warm);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(58, 48, 32, .04), 0 16px 36px -30px rgba(58, 48, 32, .5);
+}
+
+.viz-page .kpi + .kpi {
+  border-left: 1px solid var(--line-warm);
+}
+
+.viz-page .kpi .v {
+  margin-top: 12px;
+  font-size: 27px;
+  letter-spacing: -.03em;
+}
+
+/* 原来的 min-width:10ch 会把「元」推到很远，金额和单位之间空一大块；
+   改成按内容宽度，单位紧跟数字，滚动计数时宽度自然增长 */
+.viz-page .kpi .metric-value {
+  min-width: 0;
+}
+
+.viz-page .kpi .v small {
+  margin-left: 4px;
+}
+
+/* 执行率卡做深色强调，和首页呼应 */
+.viz-page .kpi.kpi-accent {
+  background: #14181d;
+  border-color: #14181d;
+  box-shadow: 0 18px 40px -28px rgba(20, 24, 29, .8);
+}
+
+.viz-page .kpi.kpi-accent .k {
+  color: rgba(255, 255, 255, .62);
+}
+
+.viz-page .kpi.kpi-accent .v,
+.viz-page .kpi.kpi-accent .metric-value {
+  color: #fff;
+}
+
+.viz-page .kpi.kpi-accent .note {
+  color: rgba(255, 255, 255, .58);
+}
+
+.viz-page .viz-card {
+  border-color: var(--line-warm);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(58, 48, 32, .04), 0 18px 40px -32px rgba(58, 48, 32, .5);
+}
+
+.viz-page .insight-summary {
+  border-radius: 16px;
+}
+
+/* ---------------------------- 页脚构建标记 ---------------------------- */
+
+.build-stamp {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(17, 22, 27, .14);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

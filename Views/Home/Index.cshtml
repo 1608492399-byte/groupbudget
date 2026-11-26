@@ -126,7 +126,7 @@
             <div class="v"><span data-countup="@Model.PendingCount">@Model.PendingCount</span><small>单</small></div>
             <div class="note">已提交、等待审核意见</div>
         </div>
-        <div class="metric" data-reveal>
+        <div class="metric metric-accent" data-reveal>
             <div class="k">@(batch?.PlanYear ?? 2027) 年预算合计</div>
             <div class="v"><span data-countup="@Model.PlannedTotal.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-countup-digits="2" data-countup-duration="1200">@Model.PlannedTotal.ToString("N2")</span><small>元</small></div>
             <div class="note">按部门已填报金额汇总</div>

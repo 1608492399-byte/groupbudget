@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="~/css/brand.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/viz.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/motion.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/polish.css" asp-append-version="true" />
 </head>
 <body class="@ViewData["BodyClass"]">
     @{
@@ -131,7 +132,22 @@
         </main>
     </div>
     <footer class="border-top footer text-muted mt-4">
-        <div class="container-fluid px-4">内部系统 · 金额单位：元 · 所有操作留痕</div>
+        <div class="container-fluid px-4">
+            内部系统 · 金额单位：元 · 所有操作留痕
+            @{
+                var buildStamp = "—";
+                try
+                {
+                    var loc = typeof(GroupBudget.Data.ApplicationDbContext).Assembly.Location;
+                    if (!string.IsNullOrEmpty(loc) && System.IO.File.Exists(loc))
+                    {
+                        buildStamp = System.IO.File.GetLastWriteTime(loc).ToString("yyyy-MM-dd HH:mm");
+                    }
+                }
+                catch { /* 取不到就显示占位，不影响页面 */ }
+            }
+            <span class="build-stamp" title="当前运行的程序构建时间">构建 @buildStamp</span>
+        </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
